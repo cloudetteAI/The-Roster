@@ -14,7 +14,7 @@ const TEMPLATES = {
     fields: () => [F('LinkedIn', 'text', { link: 1 }), F('Facebook', 'text', { link: 1 }), F('Instagram', 'text', { link: 1 }),
       F('Seen on a dating app', 'checkbox'), F('Which app', 'select', { options: ['Hinge', 'Bumble', 'Tinder', 'Raya', 'The League', 'Coffee Meets Bagel', 'Other'] }),
       F('Where we met', 'text'), F('First date', 'date'), F('How was the first date', 'rating'), F('First date notes', 'notes'), F('Notes', 'notes')],
-    prefs: ['Arms', 'Stomach', 'Hair', 'Face', 'Overall looks', 'Clothing / style', 'Smell', 'Vibe'] },
+    prefs: ['Arms', 'Abs', 'Hair', 'Face', 'Overall looks', 'Clothing / style', 'Smell', 'Vibe'] },
   sports: { name: 'Sports Team', emoji: '🏀', blurb: 'Track players, positions, skill, and who can make game day.',
     fields: () => [F('Sport', 'select', { options: ['Soccer', 'Basketball', 'Baseball', 'Softball', 'Football', 'Volleyball', 'Hockey', 'Pickleball', 'Tennis', 'Other'] }),
       F('Position', 'text'), F('Skill level', 'select', { options: ['Beginner', 'Intermediate', 'Advanced', 'Elite'] }),
@@ -31,10 +31,17 @@ const FIELD_TYPES = ['text', 'notes', 'select', 'rating', 'checkbox', 'date'];
 
 // ---------- Storage ----------
 const LS = 'theroster_v1', LSS = 'theroster_shares';
+// Migrate renamed categories (Stomach -> Abs), keeping saved votes
+const RENAME = { Stomach: 'Abs' };
+function migrate() {
+  const rk = o => { if (!o) return; for (const [a, b] of Object.entries(RENAME)) if (a in o) { if (!(b in o)) o[b] = o[a]; delete o[a]; } };
+  for (const r of data.rosters || []) { if (r.prefs) r.prefs = r.prefs.map(k => RENAME[k] || k); for (const p of r.people || []) { rk(p.prefs); (p.feedback || []).forEach(f => rk(f.votes)); } }
+}
 async function load() {
-  if (DEMO) { data = JSON.parse(localStorage.getItem(LS) || '{"rosters":[]}'); return; }
+  if (DEMO) { data = JSON.parse(localStorage.getItem(LS) || '{"rosters":[]}'); migrate(); return; }
   const s = await fb.getDoc(fb.doc(fb.db, 'users', user.uid));
   data = s.exists() ? JSON.parse(s.data().json || '{"rosters":[]}') : { rosters: [] };
+  migrate();
   await pullFeedback();
 }
 let saveT;
@@ -67,6 +74,7 @@ async function pullFeedback() {
     p.feedback = p.feedback || [];
     for (const f of list) { const k = f._id || (f.at + f.from); if (!p.feedback.some(x => x.k === k)) p.feedback.push({ ...f, k }); }
   }
+  migrate();
 }
 
 // ---------- Auth ----------
@@ -149,7 +157,7 @@ function viewFriend(code, s) {
   <div class="pcard" style="cursor:default">${c.photo ? `<div class="ph" style="background-image:url(${c.photo})"></div>` : ''}<div class="b"><div class="cn">Code name</div><h3>${esc(c.name)}</h3>${(c.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
   ${(c.fields || []).map(f => `<div><span class="mut">${esc(f.label)}:</span> ${esc(f.value === true ? 'Yes' : f.value)}</div>`).join('')}</div></div>
   <div class="panel"><label class="f"><span>Your name (optional)</span><input id="ffrom"></label><label class="chk"><input type="checkbox" id="fknows"> I know this person personally</label>
-  <p class="mut">Based on what you know, are they good for your friend?</p><div class="thumbs">${(c.categories || []).map(k => `<div class="thumb"><span>${esc(k)}</span><span><button data-fv="${esc(k)}" data-v="up">👍</button><button data-fv="${esc(k)}" data-v="down">👎</button></span></div>`).join('')}</div>
+  <p class="mut">Based on what you know, are they good for your friend?</p><div class="thumbs">${(c.categories || []).map(k => RENAME[k] || k).map(k => `<div class="thumb"><span>${esc(k)}</span><span><button data-fv="${esc(k)}" data-v="up">👍</button><button data-fv="${esc(k)}" data-v="down">👎</button></span></div>`).join('')}</div>
   <label class="f"><span>Comment</span><textarea id="fcom"></textarea></label><button class="btn" id="fsend">Send feedback</button></div></div>`;
 }
 
