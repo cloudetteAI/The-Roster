@@ -132,23 +132,23 @@ function viewRoster(r) {
 function fieldInput(f, v) {
   const n = `data-f="${f.id}"`;
   if (f.type === 'notes') return `<textarea ${n}>${esc(v)}</textarea>`;
-  if (f.type === 'checkbox') return `<label class="chk"><input type="checkbox" ${n} ${v ? 'checked' : ''}> Yes</label>`;
+  if (f.type === 'checkbox') return `<label class="sw"><input type="checkbox" ${n} ${v ? 'checked' : ''}><i></i><b>${v ? 'Yes' : 'No'}</b></label>`;
   if (f.type === 'date') return `<input type="date" ${n} value="${esc(v)}">`;
-  if (f.type === 'select') return `<select ${n}><option value="">—</option>${(f.options || []).map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  if (f.type === 'select') return `<div class="seg">${(f.options || []).map(o => `<label><input type="radio" name="s_${f.id}" ${n} value="${esc(o)}" ${o === v ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>`;
   if (f.type === 'rating') return `<div class="stars" data-rate="${f.id}">${[1, 2, 3, 4, 5].map(i => `<button type="button" data-v="${i}" class="${i <= (v || 0) ? 'on' : ''}">★</button>`).join('')}</div>`;
   return `<input ${n} value="${esc(v)}" placeholder="${f.link ? 'https://…' : ''}">${f.link && v ? ` <a href="${esc(/^https?:/.test(v) ? v : 'https://' + v)}" target="_blank" rel="noopener">open ↗</a>` : ''}`;
 }
 function viewPerson(r, p) {
   const prefs = r.prefs || [];
-  return `${header()}<div class="wrap"><div class="row"><a href="#r/${r.id}">← ${esc(r.name)}</a><span class="sp"></span><button class="btn sm" id="share">🔗 Get feedback</button><button class="btn danger sm" id="delp">Remove</button></div>
-  <div class="panel"><label class="f"><span>Code name</span><input id="pname" value="${esc(p.name)}" placeholder="e.g. Mr. Tuesday, The Architect"></label><p class="hint">☾ Code names keep things private — skip real names.</p>
+  return `${header()}<div class="wrap"><div class="row"><a class="back" href="#r/${r.id}">← ${esc(r.name)}</a><span class="sp"></span><button class="btn sm" id="share">🔗 Get feedback</button><button class="btn danger sm" id="delp">Remove</button></div>
+  <div class="pgrid"><div class="pane"><div class="panel hero-p"><div class="avatar" style="${p.photos?.[0] ? `background-image:url(${p.photos[0]})` : ''}">${p.photos?.[0] ? '' : esc((p.name || '?')[0])}</div><label class="f"><span>Code name</span><input id="pname" value="${esc(p.name)}" placeholder="e.g. Mr. Tuesday, The Architect"></label><p class="hint">☾ Code names keep things private — skip real names.</p>
   <label class="f"><span>Overall ranking (1 = top)</span><input type="number" min="1" id="prank" value="${p.rank || ''}"></label>
-  <label class="f"><span>Tags / labels (comma separated — e.g. tall, funny, local)</span><input id="ptags" value="${esc((p.tags || []).join(', '))}"></label></div>
+  <label class="f"><span>Tags / labels (comma separated — e.g. tall, funny, local)</span><input id="ptags" value="${esc((p.tags || []).join(', '))}"></label><div class="chips">${(p.tags || []).map(t => `<button class="tag chip" data-rmtag="${esc(t)}">#${esc(t)} <i>×</i></button>`).join('')}</div></div>
   <div class="panel"><b>📸 Photos</b><div class="photos" style="margin:10px 0">${(p.photos || []).map((u, i) => `<div style="background-image:url(${u})"><button data-rmph="${i}">×</button></div>`).join('')}</div>
-  <input type="file" accept="image/*" multiple id="phup"><p class="mut">${DEMO ? 'Demo mode: photos are resized and stored as data URLs in this browser.' : 'Photos are stored (resized) inside your private roster doc. Firebase Storage-ready: swap to Storage for full-size uploads.'}</p></div>
-  <div class="panel"><b>Details</b>${r.fields.map(f => `<label class="f"><span>${esc(f.label)}</span>${fieldInput(f, p.values?.[f.id])}</label>`).join('')}</div>
-  ${prefs.length ? `<div class="panel"><b>Physical preferences</b><p class="mut">Thumbs up or down — private to you.</p><div class="thumbs">${prefs.map(k => `<div class="thumb"><span>${esc(k)}</span><span><button data-pref="${esc(k)}" data-v="up" class="${p.prefs?.[k] === 'up' ? 'up' : ''}">👍</button><button data-pref="${esc(k)}" data-v="down" class="${p.prefs?.[k] === 'down' ? 'down' : ''}">👎</button></span></div>`).join('')}</div></div>` : ''}
-  <div class="panel"><div class="row"><b class="sp">💬 Friend feedback</b><button class="btn ghost sm" id="refresh">Refresh</button></div>${(p.feedback || []).map(f => `<div class="fb"><b>${esc(f.from || 'A friend')}</b> ${f.knows ? '· knows them personally' : ''}<div>${Object.entries(f.votes || {}).map(([k, v]) => `<span class="tag">${esc(k)} ${v === 'up' ? '👍' : '👎'}</span>`).join('')}</div>${f.comment ? `<div>“${esc(f.comment)}”</div>` : ''}</div>`).join('') || '<p class="mut">No feedback yet. Tap “Get feedback” to share a limited card with a friend.</p>'}</div></div>`;
+  <input type="file" accept="image/*" multiple id="phup"><p class="mut">${DEMO ? 'Demo mode: photos are resized and stored as data URLs in this browser.' : 'Photos are stored (resized) inside your private roster doc. Firebase Storage-ready: swap to Storage for full-size uploads.'}</p></div></div><div class="pane">
+  <div class="panel"><b class="ph2">{ details }</b><div class="kv">${r.fields.map(f => `<label class="f bub ${f.type === 'notes' ? 'wide' : ''}"><span>${esc(f.label)}</span>${fieldInput(f, p.values?.[f.id])}</label>`).join('')}</div></div>
+  ${prefs.length ? `<div class="panel"><b>Physical preferences</b><p class="mut">Thumbs up or down — private to you.</p><div class="thumbs">${prefs.map(k => `<div class="thumb ${p.prefs?.[k] || ''}"><span>${esc(k)}</span><span><button data-pref="${esc(k)}" data-v="up" class="${p.prefs?.[k] === 'up' ? 'up' : ''}">👍</button><button data-pref="${esc(k)}" data-v="down" class="${p.prefs?.[k] === 'down' ? 'down' : ''}">👎</button></span></div>`).join('')}</div></div>` : ''}
+  <div class="panel"><div class="row"><b class="sp">💬 Friend feedback</b><button class="btn ghost sm" id="refresh">Refresh</button></div>${(p.feedback || []).map(f => `<div class="fb"><b>${esc(f.from || 'A friend')}</b> ${f.knows ? '· knows them personally' : ''}<div>${Object.entries(f.votes || {}).map(([k, v]) => `<span class="tag">${esc(k)} ${v === 'up' ? '👍' : '👎'}</span>`).join('')}</div>${f.comment ? `<div>“${esc(f.comment)}”</div>` : ''}</div>`).join('') || '<p class="mut">No feedback yet. Tap “Get feedback” to share a limited card with a friend.</p>'}</div></div></div></div>`;
 }
 function viewFriend(code, s) {
   if (!s) return `${header()}<div class="wrap"><div class="panel">This share link isn't valid (or, in demo mode, was created in another browser).</div></div>`;
@@ -213,10 +213,19 @@ async function route() {
   else if (v === 'r' && r) { app.innerHTML = viewRoster(r); bindRoster(r); }
   else if (v === 'p' && p) { app.innerHTML = viewPerson(r, p); bindPerson(r, p); }
   else app.innerHTML = viewLanding();
+  if (user) app.insertAdjacentHTML('beforeend', nav(v, r));
+  if (v === 'r' && r) { $('#fab').onclick = () => $('#addp').click(); }
+  document.body.classList.toggle('hasnav', !!user);
   bindCommon(); window.scrollTo(0, 0);
+}
+function nav(v, r) {
+  const it = (h, ic, l, on) => `<a href="${h}" class="${on ? 'on' : ''}"><span>${ic}</span><em>${l}</em></a>`;
+  const last = data.rosters[0];
+  return `<nav class="tabs">${it('#home', '☾', 'Home', v === 'home')}${it(last ? '#r/' + last.id : '#home', '✦', 'Roster', v === 'r' || v === 'p')}${it('#', '🔮', 'Explore', !v)}<a href="#" id="out2"><span>⏻</span><em>Sign out</em></a></nav>${v === 'r' && r ? '<button class="fab" id="fab" aria-label="Add a code name">＋<em> Code name</em></button>' : ''}`;
 }
 function bindCommon() {
   $('#out') && ($('#out').onclick = signOut);
+  $('#out2') && ($('#out2').onclick = e => { e.preventDefault(); signOut(); });
   document.querySelectorAll('[data-signin]').forEach(b => b.onclick = () => signIn(b.dataset.signin));
   document.querySelectorAll('[data-start]').forEach(c => c.onclick = () => {
     if (!user) { sessionStorage.setItem('pendingStart', c.dataset.start); location.hash = '#signin'; return; }
@@ -244,7 +253,9 @@ function bindPerson(r, p) {
   $('#ptags').onchange = e => { p.tags = [...new Set(e.target.value.split(',').map(s => s.trim()).filter(Boolean))]; save(); };
   document.querySelectorAll('[data-f]').forEach(e => { const ev = e.tagName === 'SELECT' || e.type === 'checkbox' || e.type === 'date' ? 'onchange' : 'oninput'; e[ev] = () => { p.values[e.dataset.f] = e.type === 'checkbox' ? e.checked : e.value; save(); }; });
   document.querySelectorAll('[data-rate]').forEach(s => s.querySelectorAll('button').forEach(b => b.onclick = () => { p.values[s.dataset.rate] = +b.dataset.v; save(); s.querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.v <= +b.dataset.v)); }));
-  document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => { const k = b.dataset.pref; p.prefs[k] = p.prefs[k] === b.dataset.v ? null : b.dataset.v; save(); route(); });
+  document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => { const k = b.dataset.pref; p.prefs[k] = p.prefs[k] === b.dataset.v ? null : b.dataset.v; save(); const t = b.closest('.thumb'); t.className = 'thumb pop ' + (p.prefs[k] || ''); t.querySelectorAll('button').forEach(x => x.className = p.prefs[k] === x.dataset.v ? x.dataset.v : ''); });
+  document.querySelectorAll('[data-rmtag]').forEach(b => b.onclick = () => { p.tags = p.tags.filter(t => t !== b.dataset.rmtag); save(); route(); });
+  document.querySelectorAll('.sw input').forEach(i => i.addEventListener('change', () => i.parentNode.querySelector('b').textContent = i.checked ? 'Yes' : 'No'));
   $('#phup').onchange = async e => { for (const f of e.target.files) p.photos.push(await resize(f)); save(); route(); };
   document.querySelectorAll('[data-rmph]').forEach(b => b.onclick = () => { p.photos.splice(+b.dataset.rmph, 1); save(); route(); });
   $('#delp').onclick = () => { if (confirm('Remove ' + p.name + '?')) { r.people = r.people.filter(x => x !== p); save(); location.hash = '#r/' + r.id; } };
