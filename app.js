@@ -85,19 +85,19 @@ async function signIn(provider) {
 async function signOut() { if (DEMO) { sessionStorage.removeItem('demoUser'); user = null; } else await fb.signOut(fb.auth); location.hash = ''; route(); }
 
 // ---------- Views ----------
-const header = () => `<div class="top"><div class="logo" onclick="location.hash='${user ? '#home' : ''}'">🗂️ The <span>Roster</span>${DEMO ? '<span class="badge">DEMO MODE</span>' : ''}</div>
+const header = () => `<div class="top"><div class="logo" onclick="location.hash='${user ? '#home' : ''}'"><span class="moon">☾</span> The <span>Roster</span>${DEMO ? '<span class="badge">DEMO MODE</span>' : ''}</div>
   <div>${user ? `<button class="btn ghost sm" id="out">Sign out</button>` : `<button class="btn sm" onclick="location.hash='#signin'">Sign in</button>`}</div></div>`;
 
 function viewLanding() {
   const t = TEMPLATES;
-  return `${header()}<div class="wrap"><div class="hero"><h1>Build <em>any</em> roster.</h1>
+  return `${header()}<div class="wrap"><div class="hero"><div class="sparkle">✦ ☾ ✦</div><h1>Build <em>any</em> roster.</h1>
   <p>Dates, teams, friends, babysitters — or anything you can dream up. Rank them, tag them, and ask your friends what they think.</p>
-  <button class="btn" onclick="location.hash='${user ? '#home' : '#signin'}'">Get started</button></div>
+  <button class="btn" onclick="location.hash='${user ? '#home' : '#signin'}'">Get started ✦</button></div>
   <div class="grid">${Object.entries(t).map(([k, v]) => `<div class="tcard ${k === 'dating' ? 'feat' : ''}" data-start="${k}"><div class="em">${v.emoji}</div><h3>${v.name}${k === 'dating' ? ' · Featured' : ''}</h3><p>${v.blurb}</p></div>`).join('')}</div>
   <div class="panel" style="margin-top:24px"><b>🔒 Private by default.</b> <span class="mut">Your roster is saved to your account only. Share a single limited card with a friend to get their take — they never see your rankings or notes.</span></div></div>`;
 }
 function viewSignin() {
-  return `${header()}<div class="wrap"><div class="signin panel"><div style="font-size:44px">🗂️</div><h2>Welcome to The Roster</h2><p class="mut">Sign in to save your rosters.</p>
+  return `${header()}<div class="wrap"><div class="signin panel"><div class="moonbig">☾</div><h2>Welcome to The Roster</h2><p class="mut">Sign in to save your rosters.</p>
   <button class="btn google" data-signin="google">🟦 Continue with Google</button><button class="btn apple" data-signin="apple"> Continue with Apple</button>
   ${DEMO ? '<p class="mut">Demo mode: Firebase isn\'t configured yet, so either button signs you into a local demo account saved in this browser.</p>' : ''}</div></div>`;
 }
@@ -114,10 +114,10 @@ function viewRoster(r) {
   const card = p => `<div class="pcard" onclick="location.hash='#p/${r.id}/${p.id}'"><div class="ph" style="${p.photos?.[0] ? `background-image:url(${p.photos[0]})` : ''}">${p.photos?.[0] ? '' : esc((p.name || '?')[0])}</div>
     <div class="b"><h4>${p.rank ? '#' + p.rank + ' ' : ''}${esc(p.name)}</h4>${(p.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}${p.feedback?.length ? `<div class="mut">💬 ${p.feedback.length} feedback</div>` : ''}</div></div>`;
   const body = groupBy && tags.length ? tags.map(t => { const g = ppl.filter(p => (p.tags || []).includes(t)); return g.length ? `<h3>#${esc(t)}</h3><div class="grid">${g.map(card).join('')}</div>` : ''; }).join('') + (() => { const u = ppl.filter(p => !(p.tags || []).length); return u.length ? `<h3>Untagged</h3><div class="grid">${u.map(card).join('')}</div>` : ''; })()
-    : `<div class="grid">${ppl.map(card).join('') || '<p class="mut">Nobody here yet. Add your first person!</p>'}</div>`;
+    : `<div class="grid">${ppl.map(card).join('') || '<p class="mut">Nobody here yet. Add your first code name ✦</p>'}</div>`;
   return `${header()}<div class="wrap"><div class="row"><h2 class="sp">${TEMPLATES[r.type]?.emoji} ${esc(r.name)}</h2>
   <button class="btn ghost sm" id="fields">⚙️ Fields</button><button class="btn ghost sm" id="rename">Rename</button><button class="btn danger sm" id="delr">Delete</button></div>
-  <div class="row"><button class="btn" id="addp">+ Add person</button><span class="sp"></span><label class="chk mut"><input type="checkbox" id="grp" ${groupBy ? 'checked' : ''}> Group by tag</label></div>
+  <div class="row"><button class="btn" id="addp">+ Add a code name</button><span class="sp"></span><label class="chk mut"><input type="checkbox" id="grp" ${groupBy ? 'checked' : ''}> Group by tag</label></div>
   ${tags.length ? `<div style="margin:12px 0"><span class="mut">Filter: </span><span class="tag ${!filterTag ? 'on' : ''}" data-ft="">All</span>${tags.map(t => `<span class="tag ${filterTag === t ? 'on' : ''}" data-ft="${esc(t)}">${esc(t)}</span>`).join('')}</div>` : ''}
   ${body}</div>`;
 }
@@ -133,7 +133,7 @@ function fieldInput(f, v) {
 function viewPerson(r, p) {
   const prefs = r.prefs || [];
   return `${header()}<div class="wrap"><div class="row"><a href="#r/${r.id}">← ${esc(r.name)}</a><span class="sp"></span><button class="btn sm" id="share">🔗 Get feedback</button><button class="btn danger sm" id="delp">Remove</button></div>
-  <div class="panel"><label class="f"><span>Name</span><input id="pname" value="${esc(p.name)}"></label>
+  <div class="panel"><label class="f"><span>Code name</span><input id="pname" value="${esc(p.name)}" placeholder="e.g. Mr. Tuesday, The Architect"></label><p class="hint">☾ Code names keep things private — skip real names.</p>
   <label class="f"><span>Overall ranking (1 = top)</span><input type="number" min="1" id="prank" value="${p.rank || ''}"></label>
   <label class="f"><span>Tags / labels (comma separated — e.g. tall, funny, local)</span><input id="ptags" value="${esc((p.tags || []).join(', '))}"></label></div>
   <div class="panel"><b>📸 Photos</b><div class="photos" style="margin:10px 0">${(p.photos || []).map((u, i) => `<div style="background-image:url(${u})"><button data-rmph="${i}">×</button></div>`).join('')}</div>
@@ -146,7 +146,7 @@ function viewFriend(code, s) {
   if (!s) return `${header()}<div class="wrap"><div class="panel">This share link isn't valid (or, in demo mode, was created in another browser).</div></div>`;
   const c = s.card;
   return `${header()}<div class="wrap" style="max-width:560px"><h2>Your friend wants your take 👀</h2>
-  <div class="pcard" style="cursor:default">${c.photo ? `<div class="ph" style="background-image:url(${c.photo})"></div>` : ''}<div class="b"><h3>${esc(c.name)}</h3>${(c.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
+  <div class="pcard" style="cursor:default">${c.photo ? `<div class="ph" style="background-image:url(${c.photo})"></div>` : ''}<div class="b"><div class="cn">Code name</div><h3>${esc(c.name)}</h3>${(c.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
   ${(c.fields || []).map(f => `<div><span class="mut">${esc(f.label)}:</span> ${esc(f.value === true ? 'Yes' : f.value)}</div>`).join('')}</div></div>
   <div class="panel"><label class="f"><span>Your name (optional)</span><input id="ffrom"></label><label class="chk"><input type="checkbox" id="fknows"> I know this person personally</label>
   <p class="mut">Based on what you know, are they good for your friend?</p><div class="thumbs">${(c.categories || []).map(k => `<div class="thumb"><span>${esc(k)}</span><span><button data-fv="${esc(k)}" data-v="up">👍</button><button data-fv="${esc(k)}" data-v="down">👎</button></span></div>`).join('')}</div>
@@ -218,7 +218,11 @@ function bindCommon() {
   });
 }
 function bindRoster(r) {
-  $('#addp').onclick = () => { const n = prompt('Name?'); if (!n) return; const p = { id: uid(), name: n, values: {}, tags: [], photos: [], prefs: {}, feedback: [] }; r.people.push(p); save(); location.hash = `#p/${r.id}/${p.id}`; };
+  $('#addp').onclick = () => modal(`<h3>✦ Add a code name</h3><label class="f"><span>Code name</span><input id="ncode" placeholder="e.g. Mr. Tuesday, The Architect" autocomplete="off"></label><p class="hint">☾ Code names keep things private — avoid real names.</p><div class="row"><span class="sp"></span><button class="btn ghost sm" id="ncancel">Cancel</button><button class="btn" id="nadd">Add</button></div>`, m => {
+    const i = m.querySelector('#ncode'); i.focus();
+    const go = () => { const n = i.value.trim(); if (!n) return; const p = { id: uid(), name: n, values: {}, tags: [], photos: [], prefs: {}, feedback: [] }; r.people.push(p); save(); m.remove(); location.hash = `#p/${r.id}/${p.id}`; };
+    m.querySelector('#nadd').onclick = go; i.onkeydown = e => { if (e.key === 'Enter') go(); }; m.querySelector('#ncancel').onclick = () => m.remove();
+  });
   $('#fields').onclick = () => fieldsModal(r);
   $('#rename').onclick = () => { const n = prompt('Roster name', r.name); if (n) { r.name = n; save(); route(); } };
   $('#delr').onclick = () => { if (confirm('Delete this roster?')) { data.rosters = data.rosters.filter(x => x !== r); save(); location.hash = '#home'; } };
