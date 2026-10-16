@@ -14,7 +14,7 @@ const TEMPLATES = {
     fields: () => [F('LinkedIn', 'text', { link: 1 }), F('Facebook', 'text', { link: 1 }), F('Instagram', 'text', { link: 1 }),
       F('Seen on a dating app', 'checkbox'), F('Which app', 'select', { options: ['Hinge', 'Bumble', 'Tinder', 'Raya', 'The League', 'Coffee Meets Bagel', 'Other'] }),
       F('Where we met', 'text'), F('First date', 'date'), F('How was the first date', 'rating'), F('First date notes', 'notes'), F('Notes', 'notes')],
-    prefs: ['Arms', 'Abs', 'Hair', 'Face', 'Overall looks', 'Clothing / style', 'Smell', 'Vibe'] },
+    prefs: ['Height', 'Arms', 'Abs', 'Hair', 'Face', 'Overall looks', 'Clothing / style', 'Smell', 'Vibe'] },
   sports: { name: 'Sports Team', emoji: '🏀', blurb: 'Track players, positions, skill, and who can make game day.',
     fields: () => [F('Sport', 'select', { options: ['Soccer', 'Basketball', 'Baseball', 'Softball', 'Football', 'Volleyball', 'Hockey', 'Pickleball', 'Tennis', 'Other'] }),
       F('Position', 'text'), F('Skill level', 'select', { options: ['Beginner', 'Intermediate', 'Advanced', 'Elite'] }),
@@ -35,7 +35,7 @@ const LS = 'theroster_v1', LSS = 'theroster_shares';
 const RENAME = { Stomach: 'Abs' };
 function migrate() {
   const rk = o => { if (!o) return; for (const [a, b] of Object.entries(RENAME)) if (a in o) { if (!(b in o)) o[b] = o[a]; delete o[a]; } };
-  for (const r of data.rosters || []) { for (const p of r.people || []) { p.status = p.status || 'active'; p.history = p.history || [{ at: p.addedAt || Date.now(), from: null, to: p.status }]; p.addedAt = p.addedAt || Date.now(); p.rankHist = p.rankHist || []; } if (r.people) renumber(r); if (r.prefs) r.prefs = r.prefs.map(k => RENAME[k] || k); for (const p of r.people || []) { rk(p.prefs); (p.feedback || []).forEach(f => rk(f.votes)); } }
+  for (const r of data.rosters || []) { for (const p of r.people || []) { p.status = p.status || 'active'; p.history = p.history || [{ at: p.addedAt || Date.now(), from: null, to: p.status }]; p.addedAt = p.addedAt || Date.now(); p.rankHist = p.rankHist || []; } if (r.type === 'dating' && r.prefs && !r.prefs.includes('Height')) r.prefs.unshift('Height'); if (!r.placed) { r.placed = 1; (r.people || []).filter(p => stOf(p) === 'active').sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9)).forEach((p, i) => p.place = i < 3 ? i + 1 : null); } if (r.people) renumber(r); if (r.prefs) r.prefs = r.prefs.map(k => RENAME[k] || k); for (const p of r.people || []) { rk(p.prefs); (p.feedback || []).forEach(f => rk(f.votes)); } }
 }
 async function load() {
   if (DEMO) { data = JSON.parse(localStorage.getItem(LS) || '{"rosters":[]}'); migrate(); return; }
@@ -127,16 +127,18 @@ function viewPerson(r, p) {
   const prefs = r.prefs || [];
   return `${header()}<div class="wrap"><div class="row"><a class="back" href="#r/${r.id}">← ${esc(r.name)}</a><span class="sp"></span><button class="btn sm" id="share">🔗 Get feedback</button><button class="btn danger sm" id="delp">Remove</button></div>
   <div class="pgrid"><div class="pane"><div class="panel hero-p"><div class="avatar" style="${p.photos?.[0] ? `background-image:url(${p.photos[0]})` : ''}">${p.photos?.[0] ? '' : esc((p.name || '?')[0])}</div><label class="f"><span>Code name</span><input id="pname" value="${esc(p.name)}" placeholder="e.g. Mr. Tuesday, The Architect"></label><p class="hint">☾ Code names keep things private — skip real names.</p>
-  <label class="f"><span>Work / company</span><input id="pwork" value="${esc(p.work || '')}" placeholder="e.g. Architect at a design studio"></label><div class="stpill st-${stOf(p)}">${STATUSES[stOf(p)].ic} ${STATUSES[stOf(p)].l}${stOf(p) === 'active' ? ` · Rank #${p.rank}` : ''}</div>
+  <label class="f"><span>Work / company</span><input id="pwork" value="${esc(p.work || '')}" placeholder="e.g. Architect at a design studio"></label><div class="stpill st-${stOf(p)}">${STATUSES[stOf(p)].ic} ${STATUSES[stOf(p)].l}${stOf(p) === 'active' ? (p.place ? ` · ${PLACES[p.place][0]} ${PLACES[p.place][1]}` : ` · In the pile (#${p.rank})`) : ''}</div>
+  ${stOf(p) === 'active' ? `<label class="f"><span>Placement</span></label><div class="seg place-seg">${[1, 2, 3].map(k => `<label><input type="radio" name="pp" value="${k}" ${p.place === k ? 'checked' : ''}><span>${PLACES[k][0]} ${PLACES[k][1]}</span></label>`).join('')}<label><input type="radio" name="pp" value="" ${!p.place ? 'checked' : ''}><span>🗂️ In the pile</span></label></div>` : ''}
   <label class="f"><span>Tags / labels (comma separated — e.g. tall, funny, local)</span><input id="ptags" value="${esc((p.tags || []).join(', '))}"></label><div class="chips">${(p.tags || []).map(t => `<button class="tag chip" data-rmtag="${esc(t)}">#${esc(t)} <i>×</i></button>`).join('')}</div></div>
   <div class="panel"><b>📸 Photos</b><div class="photos" style="margin:10px 0">${(p.photos || []).map((u, i) => `<div style="background-image:url(${u})"><button data-rmph="${i}">×</button></div>`).join('')}</div>
   <input type="file" accept="image/*" multiple id="phup"><p class="mut">${DEMO ? 'Demo mode: photos are resized and stored as data URLs in this browser.' : 'Photos are stored (resized) inside your private roster doc. Firebase Storage-ready: swap to Storage for full-size uploads.'}</p></div></div><div class="pane">
   <div class="panel"><b class="ph2">{ details }</b><div class="kv">${r.fields.map(f => `<label class="f bub ${f.type === 'notes' ? 'wide' : ''}"><span>${esc(f.label)}</span>${fieldInput(f, p.values?.[f.id])}</label>`).join('')}</div></div>
-  ${prefs.length ? `<div class="panel"><b>Physical preferences</b><p class="mut">Thumbs up or down — private to you.</p><div class="thumbs">${prefs.map(k => `<div class="thumb ${p.prefs?.[k] || ''}"><span>${esc(k)}</span><span><button data-pref="${esc(k)}" data-v="up" class="${p.prefs?.[k] === 'up' ? 'up' : ''}">👍</button><button data-pref="${esc(k)}" data-v="down" class="${p.prefs?.[k] === 'down' ? 'down' : ''}">👎</button></span></div>`).join('')}</div></div>` : ''}
+  ${prefs.length ? `<div class="panel"><b>Physical preferences</b><p class="mut">Tap to cycle 👍 yes → meh → 👎 no. Private to you.</p><div class="tcs">${prefs.map(k => tcBtn('data-pref', k, p.prefs?.[k])).join('')}</div></div>` : ''}
   <div class="panel"><b>Status</b><div class="seg" style="margin:10px 0">${Object.entries(STATUSES).map(([k, v]) => `<label><input type="radio" name="pst" data-st="${k}" ${stOf(p) === k ? 'checked' : ''}><span>${v.ic} ${v.l}</span></label>`).join('')}</div>
   ${p.penalty ? `<p class="hint">⏸ ${esc(p.penalty.reason || 'No reason')}${p.penalty.returnBy ? ' · back by ' + fmtD(p.penalty.returnBy + 'T12:00') : ''}</p>` : ''}
   <div class="tl">${[...(p.history || [])].reverse().map(h => `<div class="tli"><i style="background:${SC[h.to]}"></i><div>${h.from ? STATUSES[h.from]?.l + ' → ' : 'Added as '}${STATUSES[h.to]?.l}${h.reason ? ` · “${esc(h.reason)}”` : ''}<div class="mut">${new Date(h.at).toLocaleString()}</div></div></div>`).join('')}</div></div>
-  <div class="panel"><div class="row"><b class="sp">💬 Friend feedback</b><button class="btn ghost sm" id="refresh">Refresh</button></div>${(p.feedback || []).map(f => `<div class="fb"><b>${esc(f.from || 'A friend')}</b> ${f.knows ? '· knows them personally' : ''}<div>${Object.entries(f.votes || {}).map(([k, v]) => `<span class="tag">${esc(k)} ${v === 'up' ? '👍' : '👎'}</span>`).join('')}</div>${f.comment ? `<div>“${esc(f.comment)}”</div>` : ''}</div>`).join('') || '<p class="mut">No feedback yet. Tap “Get feedback” to share a limited card with a friend.</p>'}</div></div></div></div>`;
+  <div class="panel"><div class="row"><b class="sp">💬 Friend feedback</b><button class="btn ghost sm" id="refresh">Refresh</button></div>${(p.feedback || []).map(f => `<div class="fb"><b>${esc(f.from || 'A friend')}</b> ${f.knows ? '· knows them personally' : ''}<div>${Object.entries(f.votes || {}).map(([k, v]) => `<span class="tag">${esc(k)} ${tIcon(v)}</span>`).join('')}</div>${f.comment ? `<div>“${esc(f.comment)}”</div>` : ''}</div>`).join('') || '<p class="mut">No feedback yet. Tap “Get feedback” to share a limited card with a friend.</p>'}</div></div></div>
+  <div class="savebar"><span id="sstate" class="${ed?.dirty ? 'dirty' : ''}">${ed?.dirty ? '● Unsaved changes' : '✓ All changes saved'}</span><span class="sp"></span><button class="btn ghost sm" id="pcancel">Cancel</button><button class="btn" id="psave">Save</button></div></div>`;
 }
 function viewFriend(code, s) {
   if (!s) return `${header()}<div class="wrap"><div class="panel">This share link isn't valid (or, in demo mode, was created in another browser).</div></div>`;
@@ -145,23 +147,42 @@ function viewFriend(code, s) {
   <div class="pcard" style="cursor:default">${c.photo ? `<div class="ph" style="background-image:url(${c.photo})"></div>` : ''}<div class="b"><div class="cn">Code name</div><h3>${esc(c.name)}</h3>${(c.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
   ${(c.fields || []).map(f => `<div><span class="mut">${esc(f.label)}:</span> ${esc(f.value === true ? 'Yes' : f.value)}</div>`).join('')}</div></div>
   <div class="panel"><label class="f"><span>Your name (optional)</span><input id="ffrom"></label><label class="chk"><input type="checkbox" id="fknows"> I know this person personally</label>
-  <p class="mut">Based on what you know, are they good for your friend?</p><div class="thumbs">${(c.categories || []).map(k => RENAME[k] || k).map(k => `<div class="thumb"><span>${esc(k)}</span><span><button data-fv="${esc(k)}" data-v="up">👍</button><button data-fv="${esc(k)}" data-v="down">👎</button></span></div>`).join('')}</div>
+  <p class="mut">Based on what you know, are they good for your friend?</p><p class="hint">Tap to cycle 👍 yes → meh → 👎 no.</p><div class="tcs">${(c.categories || []).map(k => RENAME[k] || k).map(k => tcBtn('data-fv', k, null)).join('')}</div>
   <label class="f"><span>Comment</span><textarea id="fcom"></textarea></label><button class="btn" id="fsend">Send feedback</button></div></div>`;
 }
 
+// ---------- Thumbs (tap-cycle) ----------
+const CYCLE = [null, 'up', 'meh', 'down'], nextV = v => CYCLE[(CYCLE.indexOf(v ?? null) + 1) % 4];
+const TLBL = { up: 'Yes', meh: 'Meh', down: 'No' };
+const tcBtn = (attr, k, v) => `<button type="button" class="tc s-${v || 'none'}" ${attr}="${esc(k)}" aria-label="${esc(k)}: ${TLBL[v] || 'not rated'}"><span class="tl">${esc(k)}</span><span class="ti">👍</span><em>${TLBL[v] || 'Tap'}</em></button>`;
+const tIcon = v => `<span class="tmini s-${v}">👍</span>`;
+function cycleBtn(b, get, set) { const v = nextV(get()); set(v); b.className = 'tc pop s-' + (v || 'none'); b.querySelector('em').textContent = TLBL[v] || 'Tap'; b.setAttribute('aria-label', b.querySelector('.tl').textContent + ': ' + (TLBL[v] || 'not rated')); }
+// ---------- Placement (1st/2nd/3rd/pile) ----------
+const PLACES = { 1: ['🥇', '1st'], 2: ['🥈', '2nd'], 3: ['🥉', '3rd'] };
+function assignPlace(r, p, k) {
+  k = k ? +k : null; if ((p.place || null) === k) return true;
+  const holder = k && r.people.find(x => x !== p && x.place === k && stOf(x) === 'active');
+  if (holder && !confirm(`${holder.name} is in ${PLACES[k][1]} place. Bump them to the pile?`)) return false;
+  if (holder) { holder.place = null; holder.rank = -1; }
+  if (!k) p.rank = 0; p.place = k; if (stOf(p) !== 'active') setStatus(r, p, 'active');
+  renumber(r); save(); toast(k ? `${PLACES[k][0]} ${p.name} is ${PLACES[k][1]}` : `${p.name} moved to the pile`); return true;
+}
 // ---------- Status / ranking ----------
 const STATUSES = { active: { l: 'Active', ic: '✦' }, penalty: { l: 'Penalty Box', ic: '⏸' }, struck: { l: 'Struck', ic: '✕' }, blocked: { l: 'Blocked', ic: '⛔' } };
 const DAY = 864e5, stOf = p => p.status || 'active';
 const fmtD = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 function renumber(r, at = Date.now()) {
-  r.people.filter(p => stOf(p) === 'active').sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9) || (a.addedAt || 0) - (b.addedAt || 0)).forEach((p, i) => p.rank = i + 1);
+  const act = r.people.filter(p => stOf(p) === 'active'), seen = {};
+  act.filter(p => p.place).sort((a, b) => a.place - b.place).forEach(p => { if (seen[p.place]) p.place = null; else seen[p.place] = 1; });
+  const top = act.filter(p => p.place).sort((a, b) => a.place - b.place), pile = act.filter(p => !p.place).sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || (a.addedAt || 0) - (b.addedAt || 0));
+  [...top, ...pile].forEach((p, i) => p.rank = i + 1);
   r.people.forEach(p => { if (stOf(p) !== 'active') p.rank = null; p.rankHist = p.rankHist || []; const l = p.rankHist[p.rankHist.length - 1]; if (!l || l.rank !== p.rank) p.rankHist.push({ at, rank: p.rank }); });
 }
 function setStatus(r, p, to, extra = {}) {
   const from = stOf(p); p.history = p.history || [];
   p.history.push({ at: Date.now(), from, to, ...extra }); p.status = to;
   if (to === 'penalty') p.penalty = { reason: extra.reason || '', returnBy: extra.returnBy || '' }; else delete p.penalty;
-  if (to === 'active' && from !== 'active') p.rank = 1e8;
+  if (to === 'active' && from !== 'active') p.rank = 1e8; if (to !== 'active') p.place = null;
   renumber(r); save();
 }
 function penaltyModal(r, p) {
@@ -173,9 +194,15 @@ function penaltyModal(r, p) {
     m.querySelector('#pk').onclick = () => { setStatus(r, p, 'penalty', { reason: m.querySelector('#pr').value.trim(), returnBy: m.querySelector('#pd').value }); m.remove(); route(); toast('Sent to the Penalty Box ⏸'); };
   });
 }
+function placeModal(r, p) {
+  modal(`<h3>🏅 Placement: ${esc(p.name)}</h3><p class="mut">Only one person per podium spot. Picking a taken spot bumps them to the pile.</p><div class="seg place-seg">${[1, 2, 3].map(k => `<label><input type="radio" name="pm" value="${k}" ${p.place === k ? 'checked' : ''}><span>${PLACES[k][0]} ${PLACES[k][1]}</span></label>`).join('')}<label><input type="radio" name="pm" value="" ${!p.place ? 'checked' : ''}><span>🗂️ In the pile</span></label></div><div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn ghost sm" id="pmc">Close</button></div>`, m => {
+    m.querySelector('#pmc').onclick = () => m.remove();
+    m.querySelectorAll('input[name=pm]').forEach(i => i.onchange = () => { if (assignPlace(r, p, i.value)) { m.remove(); route(); } else m.querySelectorAll('input[name=pm]').forEach(x => x.checked = String(p.place || '') === x.value); });
+  });
+}
 const qualities = r => [['manual', 'Overall'], ['thumbs', 'Thumbs score'], ...r.fields.filter(f => f.type === 'rating').map(f => ['f:' + f.id, f.label]), ...(r.prefs || []).map(k => ['p:' + k, k])];
 function score(p, q) {
-  const t = v => v === 'up' ? 1 : v === 'down' ? -1 : 0;
+  const t = v => v === 'up' ? 1 : v === 'down' ? -1 : 0; // meh = 0
   if (q === 'thumbs') return Object.values(p.prefs || {}).reduce((s, v) => s + t(v), 0);
   if (q.startsWith('f:')) return +(p.values?.[q.slice(2)] || 0);
   if (q.startsWith('p:')) return t(p.prefs?.[q.slice(2)]);
@@ -191,26 +218,29 @@ function cardChips(r, p) {
 }
 function bizCard(r, p, manual) {
   const st = stOf(p), ph = p.photos?.[0], b = (a, ic, l) => `<button data-act="${a}" data-pid="${p.id}" aria-label="${l}" title="${l}">${ic}</button>`;
-  const acts = st === 'active' ? (manual ? b('up', '▲', 'Move up') + b('down', '▼', 'Move down') : '') + b('pen', '⏸', 'Penalty Box') + b('strike', '✕', 'Strike') + b('block', '⛔', 'Block')
+  const acts = st === 'active' ? b('place', '🏅', 'Set placement') + (manual && !p.place ? b('up', '▲', 'Move up') + b('down', '▼', 'Move down') : '') + b('pen', '⏸', 'Penalty Box') + b('strike', '✕', 'Strike') + b('block', '⛔', 'Block')
     : st === 'penalty' ? b('ret', '↩', 'Return to roster') + b('strike', '✕', 'Strike') + b('block', '⛔', 'Block')
     : st === 'struck' ? b('ret', '↩', 'Restore') + b('block', '⛔', 'Block') : b('ret', '↩', 'Unblock & restore');
   const due = p.penalty?.returnBy, over = due && new Date(due + 'T23:59') < new Date();
-  return `<div class="biz st-${st}" data-pid="${p.id}">
-    ${st === 'active' && manual ? '<div class="handle" aria-label="Drag to reorder">⋮⋮</div>' : ''}
+  const pl = st === 'active' && p.place;
+  return `<div class="biz st-${st} ${pl ? 'place-' + pl : ''}" data-pid="${p.id}">${pl === 1 ? '<div class="crown">♛</div>' : ''}
+    ${st === 'active' && manual && !pl ? '<div class="handle" aria-label="Drag to reorder">⋮⋮</div>' : ''}
     <div class="bph" style="${ph ? `background-image:url(${ph})` : ''}">${ph ? '' : esc((p.name || '?')[0])}</div>
     <div class="bi"><div class="bn">${esc(p.name)}</div><div class="bw">${esc(p.work || 'Work / company not set')}</div>
     <div class="bc">${cardChips(r, p).map(c => `<span>${esc(c)}</span>`).join('')}</div>
     ${st === 'penalty' ? `<div class="pen ${over ? 'over' : ''}">⏸ ${esc(p.penalty?.reason || 'No reason given')}${due ? ` · back by ${fmtD(due + 'T12:00')}${over ? ' (overdue)' : ''}` : ''}</div>` : ''}
     </div><div class="qa">${acts}</div>
-    <div class="rk">${st === 'active' ? p.rank : STATUSES[st].ic}</div></div>`;
+    <div class="rk ${pl ? 'medal' : ''}">${pl ? PLACES[pl][0] : st === 'active' ? p.rank : STATUSES[st].ic}</div></div>`;
 }
 let filterTag = null, lane = 'active';
 function viewRoster(r) {
   const by = r.rankBy || 'manual', manual = by === 'manual' && !filterTag;
   const tags = [...new Set(r.people.flatMap(p => p.tags || []))].sort();
   const L = s => r.people.filter(p => stOf(p) === s && (!filterTag || (p.tags || []).includes(filterTag)));
-  const act = L('active').sort(by === 'manual' ? (a, b) => a.rank - b.rank : (a, b) => score(b, by) - score(a, by) || a.rank - b.rank);
-  const col = (s, list, empty) => `<section class="lane lane-${s} ${lane === s ? 'on' : ''}"><h3>${STATUSES[s].ic} ${STATUSES[s].l} <span class="cnt">${list.length}</span></h3>
+  const actAll = L('active'), podium = actAll.filter(p => p.place).sort((a, b) => a.place - b.place);
+  const act = actAll.filter(p => !p.place).sort(by === 'manual' ? (a, b) => a.rank - b.rank : (a, b) => score(b, by) - score(a, by) || a.rank - b.rank);
+  const col = (s, list, empty) => `<section class="lane lane-${s} ${lane === s ? 'on' : ''}"><h3>${STATUSES[s].ic} ${STATUSES[s].l} <span class="cnt">${s === 'active' ? actAll.length : list.length}</span></h3>
+    ${s === 'active' ? `<div class="podium">${[1, 2, 3].map(k => { const q = podium.find(x => x.place === k); return q ? bizCard(r, q, manual) : `<div class="slot place-${k}">${PLACES[k][0]} ${PLACES[k][1]} place is open — tap 🏅 on someone</div>`; }).join('')}</div><div class="pileh">The pile <span class="cnt">${list.length}</span></div>` : ''}
     <div class="stack" ${s === 'active' && manual ? 'id="stack"' : ''}>${list.map(p => bizCard(r, p, manual)).join('') || `<p class="mut empty">${empty}</p>`}</div></section>`;
   const cnt = s => r.people.filter(p => stOf(p) === s).length;
   const ql = qualities(r).find(q => q[0] === by)?.[1] || 'Overall';
@@ -218,7 +248,7 @@ function viewRoster(r) {
   <button class="btn ghost sm" id="fields">⚙️ Fields</button><button class="btn ghost sm" id="rename">Rename</button><button class="btn danger sm" id="delr">Delete</button><button id="addp" hidden></button></div>
   <div class="lanesw seg">${Object.entries(STATUSES).map(([k, v]) => `<label><input type="radio" name="lane" data-lane="${k}" ${lane === k ? 'checked' : ''}><span>${v.ic} ${v.l} <b>${cnt(k)}</b></span></label>`).join('')}</div>
   <div class="rankby"><span class="mut">Rank by</span><div class="seg scroll">${qualities(r).map(([k, l]) => `<label><input type="radio" name="rb" value="${k}" ${k === by ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div></div>
-  ${by !== 'manual' ? `<p class="hint">Sorted by <b>${esc(ql)}</b>. Your manual order is saved; switch to <b>Overall</b> to drag.</p>` : filterTag ? '<p class="hint">Clear the tag filter to drag and reorder.</p>' : '<p class="hint">Drag ⋮⋮ or tap ▲▼ to stack-rank.</p>'}
+  ${by !== 'manual' ? `<p class="hint">Pile sorted by <b>${esc(ql)}</b> (top three stay pinned). Your manual order is saved; switch to <b>Overall</b> to drag.</p>` : filterTag ? '<p class="hint">Clear the tag filter to drag and reorder.</p>' : '<p class="hint">🏅 Pick your top three. Drag ⋮⋮ or tap ▲▼ to order the pile.</p>'}
   ${tags.length ? `<div class="chips scroll"><span class="tag ${!filterTag ? 'on' : ''}" data-ft="">All</span>${tags.map(t => `<span class="tag ${filterTag === t ? 'on' : ''}" data-ft="${esc(t)}">#${esc(t)}</span>`).join('')}</div>` : ''}
   <div class="board">${col('active', act, 'Nobody active yet. Tap ＋ to add a code name.')}${col('penalty', L('penalty'), 'No one in the Penalty Box.')}${col('struck', L('struck'), 'No one struck.')}${col('blocked', L('blocked'), 'No one blocked.')}</div></div>`;
 }
@@ -227,7 +257,7 @@ function enableDrag(r, stack) {
     e.preventDefault(); const card = h.closest('.biz'); card.classList.add('drag');
     const move = ev => { const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('#stack .biz'); if (over && over !== card) { const rc = over.getBoundingClientRect(); stack.insertBefore(card, ev.clientY < rc.top + rc.height / 2 ? over : over.nextSibling); } };
     const up = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((t, i) => window.removeEventListener(t, i ? up : move)); card.classList.remove('drag');
-      [...stack.querySelectorAll('.biz')].forEach((c, i) => { r.people.find(x => x.id === c.dataset.pid).rank = i + 1; }); renumber(r); save(); route(); toast('Ranking saved ✦'); };
+      [...stack.querySelectorAll('.biz')].forEach((c, i) => { r.people.find(x => x.id === c.dataset.pid).rank = 10 + i; }); renumber(r); save(); route(); toast('Ranking saved ✦'); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
   });
 }
@@ -248,6 +278,7 @@ function bindRoster(r) {
     e.stopPropagation(); const p = r.people.find(x => x.id === b.dataset.pid), a = b.dataset.act;
     if (a === 'up' || a === 'down') { p.rank += a === 'up' ? -1.5 : 1.5; renumber(r); save(); route(); return; }
     if (a === 'pen') return penaltyModal(r, p);
+    if (a === 'place') return placeModal(r, p);
     if (a === 'strike') { setStatus(r, p, 'struck'); toast('Struck ✕ (restorable)'); }
     if (a === 'block') { if (!confirm('Block ' + p.name + '? They\'ll be hidden from the board (restorable from Blocked).')) return; setStatus(r, p, 'blocked'); toast('Blocked ⛔'); }
     if (a === 'ret') { setStatus(r, p, 'active'); toast('Back on the roster ✦'); }
@@ -301,9 +332,9 @@ function viewReports() {
 function exportCSV() {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`, rows = [];
   const labels = [...new Set(data.rosters.flatMap(r => r.fields.map(f => f.label)))];
-  rows.push(['Roster', 'Code name', 'Work / company', 'Status', 'Rank', 'Added', 'Days on roster', 'Tags', 'Penalty reason', 'Return by', 'Thumbs up', 'Thumbs down', ...labels]);
+  rows.push(['Roster', 'Code name', 'Work / company', 'Status', 'Rank', 'Added', 'Days on roster', 'Tags', 'Penalty reason', 'Return by', 'Thumbs up', 'Meh', 'Thumbs down', ...labels]);
   data.rosters.forEach(r => r.people.forEach(p => { const v = l => { const f = r.fields.find(x => x.label === l); return f ? p.values?.[f.id] ?? '' : ''; }; const pr = Object.entries(p.prefs || {});
-    rows.push([r.name, p.name, p.work, STATUSES[stOf(p)].l, p.rank || '', p.addedAt ? new Date(p.addedAt).toISOString().slice(0, 10) : '', p.addedAt ? Math.floor((Date.now() - p.addedAt) / DAY) : '', (p.tags || []).join('; '), p.penalty?.reason, p.penalty?.returnBy, pr.filter(x => x[1] === 'up').map(x => x[0]).join('; '), pr.filter(x => x[1] === 'down').map(x => x[0]).join('; '), ...labels.map(v)]); }));
+    rows.push([r.name, p.name, p.work, STATUSES[stOf(p)].l, p.rank || '', p.addedAt ? new Date(p.addedAt).toISOString().slice(0, 10) : '', p.addedAt ? Math.floor((Date.now() - p.addedAt) / DAY) : '', (p.tags || []).join('; '), p.penalty?.reason, p.penalty?.returnBy, pr.filter(x => x[1] === 'up').map(x => x[0]).join('; '), pr.filter(x => x[1] === 'meh').map(x => x[0]).join('; '), pr.filter(x => x[1] === 'down').map(x => x[0]).join('; '), ...labels.map(v)]); }));
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.map(r => r.map(q).join(',')).join('\r\n')], { type: 'text/csv' })); a.download = `the-roster-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); toast('CSV downloaded ✦');
 }
 function loadSample() {
@@ -314,14 +345,14 @@ function loadSample() {
   const apps = ['Hinge', 'Bumble', 'Raya', 'The League', 'Tinder'], tags = ['tall', 'funny', 'local', 'ambitious', 'great texter', 'faith', 'kids-ok'];
   const st = ['active', 'active', 'active', 'active', 'active', 'active', 'active', 'penalty', 'penalty', 'struck', 'struck', 'blocked'];
   const people = names.map(([n, w], i) => { const added = new Date(y, Math.min(new Date().getMonth(), Math.floor(rnd() * 10)), 1 + Math.floor(rnd() * 27)).getTime(); const a = Math.min(added, now - DAY * (3 + i));
-    const pr = {}; t.prefs.forEach(k => { const x = rnd(); pr[k] = x < .55 ? 'up' : x < .75 ? 'down' : null; });
+    const pr = {}; t.prefs.forEach(k => { const x = rnd(); pr[k] = x < .5 ? 'up' : x < .65 ? 'meh' : x < .8 ? 'down' : null; });
     const rh = []; let rk = 1 + Math.floor(rnd() * 7); for (let k = 0; k < 6; k++) { rh.push({ at: a + k * DAY * 6, rank: rk }); rk = Math.max(1, Math.min(9, rk + Math.round((rnd() - .5) * 3))); }
     const p = { id: 's' + i, name: n, work: w, tags: [tags[i % 7], tags[(i * 3 + 1) % 7]].filter((v, j, A) => A.indexOf(v) === j), photos: [], prefs: pr, feedback: [], addedAt: a, rankHist: rh, status: 'active', rank: rk + rnd(),
       values: { [fid('Seen on a dating app')]: i % 3 !== 2, [fid('Which app')]: i % 3 !== 2 ? apps[i % 5] : '', [fid('Where we met')]: i % 3 === 2 ? 'Friend\'s party' : '', [fid('How was the first date')]: 2 + Math.floor(rnd() * 4) }, history: [{ at: a, from: null, to: 'active' }] };
     if (st[i] !== 'active') { const at = a + DAY * (2 + Math.floor(rnd() * 20)); const reason = st[i] === 'penalty' ? ['Cancelled last minute', 'Took 3 days to text back'][i % 2] : st[i] === 'struck' ? 'Not a match' : 'Red flag'; p.history.push({ at: Math.min(at, now - DAY), from: 'active', to: st[i], reason }); p.status = st[i];
       if (st[i] === 'penalty') p.penalty = { reason, returnBy: new Date(now + (i % 2 ? -2 : 9) * DAY).toISOString().slice(0, 10) }; }
     return p; });
-  const r = { id: 'sample', type: 'dating', name: 'Sample Dating Roster ✦', fields, prefs: [...t.prefs], people }; renumber(r); data.rosters.unshift(r); save(); toast('Sample data loaded ✦');
+  const r = { id: 'sample', type: 'dating', name: 'Sample Dating Roster ✦', fields, prefs: [...t.prefs], people, placed: 1 }; people.filter(p => p.status === 'active').sort((a, b) => a.rank - b.rank).slice(0, 3).forEach((p, i) => p.place = i + 1); renumber(r); data.rosters.unshift(r); save(); toast('Sample data loaded ✦');
 }
 function bindReports() {
   $('#sample') && ($('#sample').onclick = () => { loadSample(); route(); });
@@ -372,7 +403,14 @@ function shareModal(r, p) {
 function resize(file) { return new Promise(res => { const fr = new FileReader(); fr.onload = () => { const img = new Image(); img.onload = () => { const s = Math.min(1, 640 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = img.width * s; c.height = img.height * s; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', .8)); }; img.src = fr.result; }; fr.readAsDataURL(file); }); }
 
 // ---------- Router ----------
+let ed = null;
+function revertEd() { if (!ed) return; const o = JSON.parse(ed.orig); Object.keys(ed.p).forEach(k => delete ed.p[k]); Object.assign(ed.p, o); ed = null; }
+window.addEventListener('beforeunload', e => { if (ed?.dirty) { e.preventDefault(); e.returnValue = ''; } });
 async function route() {
+  if (ed && location.hash !== `#p/${ed.r.id}/${ed.p.id}`) {
+    if (ed.dirty && !confirm('You have unsaved changes. Leave without saving?')) { history.replaceState(null, '', `#p/${ed.r.id}/${ed.p.id}`); return; }
+    if (ed.dirty) revertEd(); else ed = null;
+  }
   const h = location.hash.slice(1), [v, a, b] = h.split('/'), app = $('#app');
   if (v === 'share') { const s = await getShare(a); app.innerHTML = viewFriend(a, s); bindFriend(a); return bindCommon(); }
   if (!user && ['home', 'r', 'p', 'reports'].includes(v)) { location.hash = '#signin'; return; }
@@ -407,25 +445,30 @@ function bindCommon() {
   });
 }
 function bindPerson(r, p) {
+  if (!ed || ed.p !== p) ed = { r, p, orig: JSON.stringify(p), dirty: false };
+  const dirty = () => { ed.dirty = true; const s = $('#sstate'); if (s) { s.textContent = '● Unsaved changes'; s.className = 'dirty'; } };
+  $('#psave').onclick = () => { save(); ed.orig = JSON.stringify(p); ed.dirty = false; $('#sstate').textContent = '✓ All changes saved'; $('#sstate').className = ''; toast('Saved ✓'); };
+  $('#pcancel').onclick = () => { if (ed.dirty && !confirm('Discard unsaved changes?')) return; revertEd(); location.hash = '#r/' + r.id; };
+  document.querySelectorAll('input[name=pp]').forEach(i => i.onchange = () => { if (ed.dirty) { save(); ed.dirty = false; } assignPlace(r, p, i.value); ed.orig = JSON.stringify(p); route(); });
   p.values = p.values || {}; p.prefs = p.prefs || {};
-  $('#pname').oninput = e => { p.name = e.target.value; save(); };
-  $('#pwork').oninput = e => { p.work = e.target.value; save(); };
-  document.querySelectorAll('[data-st]').forEach(i => i.onchange = () => { const to = i.dataset.st; if (to === 'penalty') { penaltyModal(r, p); route(); return; } if (to === 'blocked' && !confirm('Block ' + p.name + '?')) return route(); setStatus(r, p, to); route(); });
-  $('#ptags').onchange = e => { p.tags = [...new Set(e.target.value.split(',').map(s => s.trim()).filter(Boolean))]; save(); };
-  document.querySelectorAll('[data-f]').forEach(e => { const ev = e.tagName === 'SELECT' || e.type === 'checkbox' || e.type === 'date' ? 'onchange' : 'oninput'; e[ev] = () => { p.values[e.dataset.f] = e.type === 'checkbox' ? e.checked : e.value; save(); }; });
-  document.querySelectorAll('[data-rate]').forEach(s => s.querySelectorAll('button').forEach(b => b.onclick = () => { p.values[s.dataset.rate] = +b.dataset.v; save(); s.querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.v <= +b.dataset.v)); }));
-  document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => { const k = b.dataset.pref; p.prefs[k] = p.prefs[k] === b.dataset.v ? null : b.dataset.v; save(); const t = b.closest('.thumb'); t.className = 'thumb pop ' + (p.prefs[k] || ''); t.querySelectorAll('button').forEach(x => x.className = p.prefs[k] === x.dataset.v ? x.dataset.v : ''); });
-  document.querySelectorAll('[data-rmtag]').forEach(b => b.onclick = () => { p.tags = p.tags.filter(t => t !== b.dataset.rmtag); save(); route(); });
+  $('#pname').oninput = e => { p.name = e.target.value; dirty(); };
+  $('#pwork').oninput = e => { p.work = e.target.value; dirty(); };
+  document.querySelectorAll('[data-st]').forEach(i => i.onchange = () => { const to = i.dataset.st; ed.dirty = false; ed.orig = JSON.stringify(p); if (to === 'penalty') { penaltyModal(r, p); route(); return; } if (to === 'blocked' && !confirm('Block ' + p.name + '?')) return route(); setStatus(r, p, to); route(); });
+  $('#ptags').onchange = e => { p.tags = [...new Set(e.target.value.split(',').map(s => s.trim()).filter(Boolean))]; dirty(); };
+  document.querySelectorAll('[data-f]').forEach(e => { const ev = e.tagName === 'SELECT' || e.type === 'checkbox' || e.type === 'date' ? 'onchange' : 'oninput'; e[ev] = () => { p.values[e.dataset.f] = e.type === 'checkbox' ? e.checked : e.value; dirty(); }; });
+  document.querySelectorAll('[data-rate]').forEach(s => s.querySelectorAll('button').forEach(b => b.onclick = () => { p.values[s.dataset.rate] = +b.dataset.v; dirty(); s.querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.v <= +b.dataset.v)); }));
+  document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => cycleBtn(b, () => p.prefs[b.dataset.pref], v => { p.prefs[b.dataset.pref] = v; dirty(); }));
+  document.querySelectorAll('[data-rmtag]').forEach(b => b.onclick = () => { p.tags = p.tags.filter(t => t !== b.dataset.rmtag); dirty(); route(); });
   document.querySelectorAll('.sw input').forEach(i => i.addEventListener('change', () => i.parentNode.querySelector('b').textContent = i.checked ? 'Yes' : 'No'));
-  $('#phup').onchange = async e => { for (const f of e.target.files) p.photos.push(await resize(f)); save(); route(); };
-  document.querySelectorAll('[data-rmph]').forEach(b => b.onclick = () => { p.photos.splice(+b.dataset.rmph, 1); save(); route(); });
+  $('#phup').onchange = async e => { for (const f of e.target.files) p.photos.push(await resize(f)); dirty(); route(); };
+  document.querySelectorAll('[data-rmph]').forEach(b => b.onclick = () => { p.photos.splice(+b.dataset.rmph, 1); dirty(); route(); });
   $('#delp').onclick = () => { if (confirm('Remove ' + p.name + '?')) { r.people = r.people.filter(x => x !== p); save(); location.hash = '#r/' + r.id; } };
   $('#share').onclick = () => shareModal(r, p);
   $('#refresh').onclick = async () => { await pullFeedback(); save(); route(); toast('Feedback refreshed'); };
 }
 function bindFriend(code) {
   const votes = {};
-  document.querySelectorAll('[data-fv]').forEach(b => b.onclick = () => { votes[b.dataset.fv] = b.dataset.v; b.parentNode.querySelectorAll('button').forEach(x => x.className = ''); b.className = b.dataset.v; });
+  document.querySelectorAll('[data-fv]').forEach(b => b.onclick = () => cycleBtn(b, () => votes[b.dataset.fv], v => { if (v) votes[b.dataset.fv] = v; else delete votes[b.dataset.fv]; }));
   $('#fsend') && ($('#fsend').onclick = async () => {
     try { await sendFeedback(code, { knows: $('#fknows').checked, votes, comment: $('#fcom').value, from: $('#ffrom').value, at: Date.now() });
       $('#app').querySelector('.wrap').innerHTML = '<div class="panel"><h2>Thanks! 💜</h2><p>Your feedback was sent privately to your friend.</p></div>'; } catch (e) { toast(e.message); }
