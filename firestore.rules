@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Each user's roster data: owner-only.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Share cards: a limited, owner-chosen subset of one person's card.
+    // Readable only by exact code (no listing). Only owner can create/update/delete.
+    match /shares/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.keys().hasOnly(['ownerUid','personId','rosterId','card','createdAt']);
+      allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+
+      // Friends leave feedback; only the owner can read it back.
+      match /feedback/{fid} {
+        allow create: if request.resource.data.keys().hasOnly(['knows','votes','comment','from','at'])
+                      && request.resource.data.comment is string
+                      && request.resource.data.comment.size() < 2000;
+        allow read, delete: if request.auth != null
+                      && get(/databases/$(database)/documents/shares/$(code)).data.ownerUid == request.auth.uid;
+        allow update: if false;
+      }
+    }
+  }
+}
