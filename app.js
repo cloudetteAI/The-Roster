@@ -37,7 +37,7 @@ function migrate() {
   data.settings = Object.assign({ activeId: null, lastUsedId: null, defaultId: null, remember: false }, data.settings || {});
 
   const rk = o => { if (!o) return; for (const [a, b] of Object.entries(RENAME)) if (a in o) { if (!(b in o)) o[b] = o[a]; delete o[a]; } };
-  for (const r of data.rosters || []) { for (const p of r.people || []) { p.status = p.status || 'active'; p.history = p.history || [{ at: p.addedAt || Date.now(), from: null, to: p.status }]; p.addedAt = p.addedAt || Date.now(); p.rankHist = p.rankHist || []; } if (r.type === 'dating' && r.prefs && !r.prefs.includes('Height')) r.prefs.unshift('Height'); if (!r.placed) { r.placed = 1; (r.people || []).filter(p => stOf(p) === 'active').sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9)).forEach((p, i) => p.place = i < 3 ? i + 1 : null); } if (r.people) renumber(r); if (r.prefs) r.prefs = r.prefs.map(k => RENAME[k] || k); for (const p of r.people || []) { rk(p.prefs); (p.feedback || []).forEach(f => rk(f.votes)); } }
+  for (const r of data.rosters || []) { if (r.type === 'dating' && !r.flagPresets) r.flagPresets = [...FLAG_PRESETS]; for (const p of r.people || []) { p.flags = p.flags || []; p.status = p.status || 'active'; p.history = p.history || [{ at: p.addedAt || Date.now(), from: null, to: p.status }]; p.addedAt = p.addedAt || Date.now(); p.rankHist = p.rankHist || []; } if (r.type === 'dating' && r.prefs && !r.prefs.includes('Height')) r.prefs.unshift('Height'); if (!r.placed) { r.placed = 1; (r.people || []).filter(p => stOf(p) === 'active').sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9)).forEach((p, i) => p.place = i < 3 ? i + 1 : null); } if (r.people) renumber(r); if (r.prefs) r.prefs = r.prefs.map(k => RENAME[k] || k); for (const p of r.people || []) { rk(p.prefs); (p.feedback || []).forEach(f => rk(f.votes)); } }
 }
 async function load() {
   if (DEMO) { data = JSON.parse(localStorage.getItem(LS) || '{"rosters":[]}'); migrate(); return; }
@@ -74,7 +74,8 @@ async function pullFeedback() {
     if (DEMO) list = demoShares()[code]?.feedback || [];
     else { try { const q = await fb.getDocs(fb.collection(fb.db, 'shares', code, 'feedback')); list = q.docs.map(d => ({ ...d.data(), _id: d.id })); } catch (e) { } }
     p.feedback = p.feedback || [];
-    for (const f of list) { const k = f._id || (f.at + f.from); if (!p.feedback.some(x => x.k === k)) p.feedback.push({ ...f, k }); }
+    for (const f of list) { const k = f._id || (f.at + f.from); if (!p.feedback.some(x => x.k === k)) p.feedback.push({ ...f, k });
+      if (f.flag?.label) { p.flags = p.flags || []; if (!p.flags.some(x => x.fbk === k)) p.flags.push({ id: k, label: f.flag.label, sev: SEV[f.flag.sev] ? f.flag.sev : 'red', note: f.comment || '', at: f.at || Date.now(), source: f.from || 'A friend', status: 'pending', fbk: k }); } }
   }
   migrate();
 }
@@ -182,6 +183,15 @@ function viewPerson(r, p) {
   <input type="file" accept="image/*" multiple id="phup"><p class="mut">${DEMO ? 'Demo mode: photos are resized and stored as data URLs in this browser.' : 'Photos are stored (resized) inside your private roster doc. Firebase Storage-ready: swap to Storage for full-size uploads.'}</p></div></div><div class="pane">
   <div class="panel"><b class="ph2">{ details }</b><div class="kv">${r.fields.map(f => `<label class="f bub ${f.type === 'notes' ? 'wide' : ''}"><span>${esc(f.label)}</span>${fieldInput(f, p.values?.[f.id])}</label>`).join('')}</div></div>
   ${prefs.length ? `<div class="panel"><b>Physical preferences</b><p class="mut">Tap to cycle 👍 yes → meh → 👎 no. Private to you.</p><div class="tcs">${prefs.map(k => tcBtn('data-pref', k, p.prefs?.[k])).join('')}</div></div>` : ''}
+  <div class="panel"><b>🚩 Flags</b>
+  ${(r.flagPresets?.length) ? `<p class="mut" style="margin:6px 0">Tap to toggle a preset:</p><div class="chips flagchips">${r.flagPresets.map(l => { const on = offFlags(p).some(f => f.label === l && f.source === 'Me'); return `<button type="button" class="tag chip ${on ? 'on' : ''}" data-preset="${esc(l)}">🚩 ${esc(l)}</button>`; }).join('')}</div>` : '<p class="mut" style="margin:6px 0">Add your own flags below. (Preset lists live in roster settings for Dating rosters.)</p>'}
+  <div class="flaglist">${offFlags(p).map(f => `<div class="flagit s-${f.sev}"><span class="fic">${SEV[f.sev]?.[0] || '🚩'}</span><div class="fx"><b>${esc(f.label)}</b><div class="mut">${SEV[f.sev]?.[1] || ''} · ${fmtD(f.at)} · from ${esc(f.source || 'Me')}${f.note ? ` · “${esc(f.note)}”` : ''}</div></div><button type="button" class="qa-x" data-rmflag="${f.id}" aria-label="Remove flag">×</button></div>`).join('') || '<p class="mut">No flags yet.</p>'}</div>
+  <div class="kv" style="margin-top:12px"><label class="f bub"><span>Custom flag</span><input id="flagtext" placeholder="e.g. Kept checking phone"></label>
+  <label class="f bub"><span>Note (optional)</span><input id="flagnote" placeholder="What happened?"></label></div>
+  <div class="seg" style="margin:10px 0">${Object.entries(SEV).map(([k, v]) => `<label><input type="radio" name="fsev" value="${k}" ${k === 'red' ? 'checked' : ''}><span>${v[0]} ${v[1]}</span></label>`).join('')}</div>
+  <button class="btn sm" id="addflag" type="button">+ Add flag</button>
+  ${penFlags(p).length ? `<div class="pendbox"><b>⏳ From friends — pending (${penFlags(p).length})</b>${penFlags(p).map(f => `<div class="flagit s-${f.sev}"><span class="fic">${SEV[f.sev]?.[0] || '🚩'}</span><div class="fx"><b>${esc(f.label)}</b><div class="mut">${SEV[f.sev]?.[1] || ''} · ${fmtD(f.at)} · from ${esc(f.source || 'A friend')}${f.note ? ` · “${esc(f.note)}”` : ''}</div></div><span class="row" style="gap:4px"><button type="button" class="btn sm" data-accflag="${f.id}">Accept</button><button type="button" class="btn ghost sm" data-disflag="${f.id}">Dismiss</button></span></div>`).join('')}</div>` : '<p class="mut" style="margin-top:12px">No pending friend flags.</p>'}
+  </div>
   <div class="panel"><b>Status</b><div class="seg" style="margin:10px 0">${Object.entries(STATUSES).map(([k, v]) => `<label><input type="radio" name="pst" data-st="${k}" ${stOf(p) === k ? 'checked' : ''}><span>${v.ic} ${v.l}</span></label>`).join('')}</div>
   ${p.penalty ? `<p class="hint">⏸ ${esc(p.penalty.reason || 'No reason')}${p.penalty.returnBy ? ' · back by ' + fmtD(p.penalty.returnBy + 'T12:00') : ''}</p>` : ''}
   <div class="tl">${[...(p.history || [])].reverse().map(h => `<div class="tli"><i style="background:${SC[h.to]}"></i><div>${h.from ? STATUSES[h.from]?.l + ' → ' : 'Added as '}${STATUSES[h.to]?.l}${h.reason ? ` · “${esc(h.reason)}”` : ''}<div class="mut">${new Date(h.at).toLocaleString()}</div></div></div>`).join('')}</div></div>
@@ -196,9 +206,18 @@ function viewFriend(code, s) {
   ${(c.fields || []).map(f => `<div><span class="mut">${esc(f.label)}:</span> ${esc(f.value === true ? 'Yes' : f.value)}</div>`).join('')}</div></div>
   <div class="panel"><label class="f"><span>Your name (optional)</span><input id="ffrom"></label><label class="chk"><input type="checkbox" id="fknows"> I know this person personally</label>
   <p class="mut">Based on what you know, are they good for your friend?</p><p class="hint">Tap to cycle 👍 yes → meh → 👎 no.</p><div class="tcs">${(c.categories || []).map(k => RENAME[k] || k).map(k => tcBtn('data-fv', k, null)).join('')}</div>
+  ${c.allowFlags === false ? '' : `<div class="pendbox"><b>🚩 Add a flag?</b><p class="mut">Optional — tell your friend if something feels off.</p>
+  <div class="chips flagchips">${(c.flagPresets || []).map(l => `<button type="button" class="tag chip" data-fflag="${esc(l)}">🚩 ${esc(l)}</button>`).join('')}</div>
+  <label class="f"><span>Or your own flag</span><input id="fflagtext" placeholder="e.g. Kept mentioning his ex"></label>
+  <div class="seg">${[['red', SEV.red], ['yellow', SEV.yellow]].map(([k, v]) => `<label><input type="radio" name="ffsev" value="${k}" ${k === 'red' ? 'checked' : ''}><span>${v[0]} ${v[1]}</span></label>`).join('')}</div></div>`}
   <label class="f"><span>Comment</span><textarea id="fcom"></textarea></label><button class="btn" id="fsend">Send feedback</button></div></div>`;
 }
 
+// ---------- Red flags ----------
+const FLAG_PRESETS = ['Really into sci-fi','Weird hobby collector','Weird stuff posted online','Vague/no real photos','Only talks about ex','Love-bombing','Flaky/cancels plans','Bad texter/ghosts','Rude to staff','No job / vague job','Lives with ex','Crypto bro','Conspiracy heavy',"Mom's basement",'Recently out of long relationship'];
+const SEV = { red: ['🚩','Red flag'], yellow: ['⚠️','Yellow / caution'], green: ['💚','Green flag'] };
+const offFlags = p => (p.flags || []).filter(f => f.status !== 'pending');
+const penFlags = p => (p.flags || []).filter(f => f.status === 'pending');
 // ---------- Thumbs (tap-cycle) ----------
 const CYCLE = [null, 'up', 'meh', 'down'], nextV = v => CYCLE[(CYCLE.indexOf(v ?? null) + 1) % 4];
 const TLBL = { up: 'Yes', meh: 'Meh', down: 'No' };
@@ -276,15 +295,16 @@ function bizCard(r, p, manual) {
     <div class="bph" style="${ph ? `background-image:url(${ph})` : ''}">${ph ? '' : esc((p.name || '?')[0])}</div>
     <div class="bi"><div class="bn">${esc(p.name)}</div><div class="bw">${esc(p.work || 'Work / company not set')}</div>
     <div class="bc">${cardChips(r, p).map(c => `<span>${esc(c)}</span>`).join('')}</div>
+    ${(() => { const o = offFlags(p), pn = penFlags(p); if (!o.length && !pn.length) return ''; const top = o.find(f => f.sev === 'red') || o[0]; return `<div class="flagline">${o.length ? `<span class="flchip">${SEV[top.sev]?.[0] || '🚩'} ${o.length} · ${esc(top.label)}</span>` : ''}${pn.length ? `<span class="flchip penb">⏳ ${pn.length} pending</span>` : ''}</div>`; })()}
     ${st === 'penalty' ? `<div class="pen ${over ? 'over' : ''}">⏸ ${esc(p.penalty?.reason || 'No reason given')}${due ? ` · back by ${fmtD(due + 'T12:00')}${over ? ' (overdue)' : ''}` : ''}</div>` : ''}
     </div><div class="qa">${acts}</div>
     <div class="rk ${pl ? 'medal' : ''}">${pl ? PLACES[pl][0] : st === 'active' ? p.rank : STATUSES[st].ic}</div></div>`;
 }
-let filterTag = null, lane = 'active';
+let filterTag = null, lane = 'active', flagFilter = false;
 function viewRoster(r) {
   const by = r.rankBy || 'manual', manual = by === 'manual' && !filterTag;
   const tags = [...new Set(r.people.flatMap(p => p.tags || []))].sort();
-  const L = s => r.people.filter(p => stOf(p) === s && (!filterTag || (p.tags || []).includes(filterTag)));
+  const L = s => r.people.filter(p => stOf(p) === s && (!filterTag || (p.tags || []).includes(filterTag)) && (!flagFilter || offFlags(p).length));
   const actAll = L('active'), podium = actAll.filter(p => p.place).sort((a, b) => a.place - b.place);
   const act = actAll.filter(p => !p.place).sort(by === 'manual' ? (a, b) => a.rank - b.rank : (a, b) => score(b, by) - score(a, by) || a.rank - b.rank);
   const col = (s, list, empty) => `<section class="lane lane-${s} ${lane === s ? 'on' : ''}"><h3>${STATUSES[s].ic} ${STATUSES[s].l} <span class="cnt">${s === 'active' ? actAll.length : list.length}</span></h3>
@@ -297,7 +317,7 @@ function viewRoster(r) {
   <div class="lanesw seg">${Object.entries(STATUSES).map(([k, v]) => `<label><input type="radio" name="lane" data-lane="${k}" ${lane === k ? 'checked' : ''}><span>${v.ic} ${v.l} <b>${cnt(k)}</b></span></label>`).join('')}</div>
   <div class="rankby"><span class="mut">Rank by</span><div class="seg scroll">${qualities(r).map(([k, l]) => `<label><input type="radio" name="rb" value="${k}" ${k === by ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('')}</div></div>
   ${by !== 'manual' ? `<p class="hint">Pile sorted by <b>${esc(ql)}</b> (top three stay pinned). Your manual order is saved; switch to <b>Overall</b> to drag.</p>` : filterTag ? '<p class="hint">Clear the tag filter to drag and reorder.</p>' : '<p class="hint">🏅 Pick your top three. Drag ⋮⋮ or tap ▲▼ to order the pile.</p>'}
-  ${tags.length ? `<div class="chips scroll"><span class="tag ${!filterTag ? 'on' : ''}" data-ft="">All</span>${tags.map(t => `<span class="tag ${filterTag === t ? 'on' : ''}" data-ft="${esc(t)}">#${esc(t)}</span>`).join('')}</div>` : ''}
+  <div class="chips scroll"><span class="tag ${!flagFilter ? 'on' : ''}" data-ff="0">All</span><span class="tag ${flagFilter ? 'on' : ''}" data-ff="1">🚩 Flagged (${r.people.filter(p => offFlags(p).length).length})</span>${tags.map(t => `<span class="tag ${filterTag === t ? 'on' : ''}" data-ft="${esc(t)}">#${esc(t)}</span>`).join('')}</div>
   <div class="board">${col('active', act, 'Nobody active yet. Tap ＋ to add a code name.')}${col('penalty', L('penalty'), 'No one in the Penalty Box.')}${col('struck', L('struck'), 'No one struck.')}${col('blocked', L('blocked'), 'No one blocked.')}</div></div>`;
 }
 function enableDrag(r, stack) {
@@ -319,6 +339,7 @@ function bindRoster(r) {
   $('#rename').onclick = () => { const n = prompt('Roster name', r.name); if (n) { r.name = n; save(); route(); } };
   $('#delr').onclick = () => { if (confirm('Delete this roster?')) { data.rosters = data.rosters.filter(x => x !== r); ['activeId','lastUsedId','defaultId'].forEach(k => { if (data.settings?.[k] === r.id) data.settings[k] = null; }); save(); location.hash = '#all'; } };
   document.querySelectorAll('[data-ft]').forEach(t => t.onclick = () => { filterTag = t.dataset.ft || null; route(); });
+  document.querySelectorAll('[data-ff]').forEach(t => t.onclick = () => { flagFilter = t.dataset.ff === '1'; route(); });
   document.querySelectorAll('[data-lane]').forEach(t => t.onchange = () => { lane = t.dataset.lane; route(); });
   document.querySelectorAll('input[name=rb]').forEach(t => t.onchange = () => { r.rankBy = t.value; save(); route(); });
   document.querySelectorAll('.biz').forEach(c => c.onclick = e => { if (!e.target.closest('button,.handle')) location.hash = `#p/${r.id}/${c.dataset.pid}`; });
@@ -372,6 +393,7 @@ function viewReports() {
   <div class="panel"><div class="row"><b class="sp">Adds over time</b><div class="seg">${years.map(y => `<label><input type="radio" name="yr" value="${y}" ${y === repYear ? 'checked' : ''}><span>${y}</span></label>`).join('')}</div></div>${bars(months)}<p class="mut">${months.reduce((a, b) => a + b, 0)} added in ${repYear}</p></div>
   <div class="panel"><b>Status breakdown</b><div class="drow">${donut(counts)}<div class="legend">${Object.entries(counts).map(([k, n]) => `<div><i style="background:${SC[k]}"></i>${STATUSES[k].l}<b>${n}</b></div>`).join('')}</div></div></div>
   <div class="panel"><div class="row"><b class="sp">Time on roster</b><span class="kpi">${avg}<small> days avg</small></span></div>${on.slice(0, 8).map(([, p, d]) => `<div class="ten"><span>${esc(p.name)}</span><div><i style="width:${d / mxd * 100}%"></i></div><b>${d}d</b></div>`).join('') || '<p class="mut">No one on the roster yet.</p>'}</div>
+  <div class="panel"><b>🚩 Red flags</b>${(() => { const all = ppl.flatMap(([, p]) => offFlags(p)), pend = ppl.reduce((n, [, p]) => n + penFlags(p).length, 0); if (!all.length) return '<p class="mut">No flags yet in this view.</p>'; const cnt = {}; all.forEach(f => { cnt[f.label] = cnt[f.label] || { n: 0, sev: f.sev }; cnt[f.label].n++; }); const top = Object.entries(cnt).sort((a, b) => b[1].n - a[1].n).slice(0, 8), mx = Math.max(...top.map(x => x[1].n)); const by = s2 => all.filter(f => f.sev === s2).length; return `<div class="bc" style="margin:8px 0"><span>🚩 ${by('red')} red</span><span>⚠️ ${by('yellow')} yellow</span><span>💚 ${by('green')} green</span>${pend ? `<span>⏳ ${pend} pending</span>` : ''}</div>${top.map(([l, o]) => `<div class="ten flagbar"><span>${esc(l)}</span><div><i style="width:${o.n / mx * 100}%"></i></div><b>${o.n}</b></div>`).join('')}`; })()}</div>
   <div class="panel"><b>Rank movement</b><p class="mut">From every reorder snapshot. ▲ means they climbed.</p>${moves.map(([, p, d]) => `<div class="mv"><span>${esc(p.name)}</span>${spark(p.rankHist)}<b class="${d > 0 ? 'upc' : d < 0 ? 'dnc' : ''}">${d > 0 ? '▲' + d : d < 0 ? '▼' + -d : '–'}</b></div>`).join('') || '<p class="mut">Reorder your roster to start tracking movement.</p>'}</div>
   <div class="panel wide"><b>Status changes</b><div class="tl">${tl.map(h => `<div class="tli"><i style="background:${SC[h.to] || '#f5a524'}"></i><div><b>${esc(h.p.name)}</b> ${h.from ? `${STATUSES[h.from]?.l} → ` : 'added as '}${STATUSES[h.to]?.l}${h.reason ? ` · “${esc(h.reason)}”` : ''}<div class="mut">${fmtD(h.at)}</div></div></div>`).join('') || '<p class="mut">No status changes yet.</p>'}</div></div>
   <div class="panel wide"><b>🔌 Integrations</b> <span class="soon">coming soon</span><div class="ints">${ints.map(([i, n, d]) => `<div class="int"><span>${i}</span><div><b>${n}</b><div class="mut">${d}</div></div><em>Soon</em></div>`).join('')}
@@ -396,12 +418,12 @@ function loadSample() {
   const people = names.map(([n, w], i) => { const added = new Date(y, Math.min(new Date().getMonth(), Math.floor(rnd() * 10)), 1 + Math.floor(rnd() * 27)).getTime(); const a = Math.min(added, now - DAY * (3 + i));
     const pr = {}; t.prefs.forEach(k => { const x = rnd(); pr[k] = x < .5 ? 'up' : x < .65 ? 'meh' : x < .8 ? 'down' : null; });
     const rh = []; let rk = 1 + Math.floor(rnd() * 7); for (let k = 0; k < 6; k++) { rh.push({ at: a + k * DAY * 6, rank: rk }); rk = Math.max(1, Math.min(9, rk + Math.round((rnd() - .5) * 3))); }
-    const p = { id: 's' + i, name: n, work: w, tags: [tags[i % 7], tags[(i * 3 + 1) % 7]].filter((v, j, A) => A.indexOf(v) === j), photos: [], prefs: pr, feedback: [], addedAt: a, rankHist: rh, status: 'active', rank: rk + rnd(),
+    const flagPool = [['Love-bombing','red'],['Flaky/cancels plans','red'],['Bad texter/ghosts','yellow'],['Crypto bro','red'],['Really into sci-fi','yellow'],['Vague/no real photos','yellow']]; const p = { id: 's' + i, name: n, work: w, flags: i % 3 === 0 ? [{ id: 'sf' + i, label: flagPool[i % 6][0], sev: flagPool[i % 6][1], note: '', at: a + DAY * 2, source: 'Me', status: 'official' }, ...(i === 0 ? [{ id: 'sfp', label: 'Only talks about ex', sev: 'red', note: 'Brought her up three times', at: a + DAY * 4, source: 'Jasmine', status: 'pending' }] : [])] : [], tags: [tags[i % 7], tags[(i * 3 + 1) % 7]].filter((v, j, A) => A.indexOf(v) === j), photos: [], prefs: pr, feedback: [], addedAt: a, rankHist: rh, status: 'active', rank: rk + rnd(),
       values: { [fid('Seen on a dating app')]: i % 3 !== 2, [fid('Which app')]: i % 3 !== 2 ? apps[i % 5] : '', [fid('Where we met')]: i % 3 === 2 ? 'Friend\'s party' : '', [fid('How was the first date')]: 2 + Math.floor(rnd() * 4) }, history: [{ at: a, from: null, to: 'active' }] };
     if (st[i] !== 'active') { const at = a + DAY * (2 + Math.floor(rnd() * 20)); const reason = st[i] === 'penalty' ? ['Cancelled last minute', 'Took 3 days to text back'][i % 2] : st[i] === 'struck' ? 'Not a match' : 'Red flag'; p.history.push({ at: Math.min(at, now - DAY), from: 'active', to: st[i], reason }); p.status = st[i];
       if (st[i] === 'penalty') p.penalty = { reason, returnBy: new Date(now + (i % 2 ? -2 : 9) * DAY).toISOString().slice(0, 10) }; }
     return p; });
-  const r = { id: 'sample', type: 'dating', name: 'Sample Dating Roster ✦', fields, prefs: [...t.prefs], people, placed: 1 }; people.filter(p => p.status === 'active').sort((a, b) => a.rank - b.rank).slice(0, 3).forEach((p, i) => p.place = i + 1); renumber(r); data.rosters.unshift(r); data.settings = data.settings || {}; data.settings.activeId = r.id; data.settings.lastUsedId = r.id; repScope = 'this'; save(); toast('Sample data loaded ✦');
+  const r = { id: 'sample', type: 'dating', name: 'Sample Dating Roster ✦', fields, prefs: [...t.prefs], flagPresets: [...FLAG_PRESETS], people, placed: 1 }; people.filter(p => p.status === 'active').sort((a, b) => a.rank - b.rank).slice(0, 3).forEach((p, i) => p.place = i + 1); renumber(r); data.rosters.unshift(r); data.settings = data.settings || {}; data.settings.activeId = r.id; data.settings.lastUsedId = r.id; repScope = 'this'; save(); toast('Sample data loaded ✦');
 }
 function bindReports() {
   $('#sample') && ($('#sample').onclick = () => { loadSample(); route(); });
@@ -416,12 +438,17 @@ function fieldsModal(r) {
   const draw = m => {
     m.firstChild.innerHTML = `<h3>Fields for ${esc(r.name)}</h3>${r.fields.map((f, i) => `<div class="row" style="margin:6px 0"><input data-lab="${i}" value="${esc(f.label)}" style="flex:2"><select data-typ="${i}" style="flex:1">${FIELD_TYPES.map(t => `<option ${t === f.type ? 'selected' : ''}>${t}</option>`).join('')}</select><button class="btn danger sm" data-rm="${i}">×</button>
     ${f.type === 'select' ? `<input data-opt="${i}" placeholder="options, comma separated" value="${esc((f.options || []).join(', '))}">` : ''}</div>`).join('')}
+    ${(r.flagPresets || r.type === 'dating') ? `<h3 style="margin-top:22px">🚩 Red-flag presets</h3><p class="mut">Rename or remove presets (changes apply to everyone in this roster).</p>${(r.flagPresets || []).map((l, i) => `<div class="row" style="margin:6px 0"><input data-flagp="${i}" value="${esc(l)}" style="flex:1"><button class="btn danger sm" data-rmflagp="${i}">×</button></div>`).join('')}<div class="row" style="margin:8px 0"><input id="newflagp" placeholder="New preset…" style="flex:1"><button class="btn ghost sm" id="addflagp">+ Add preset</button></div>` : `<div class="row" style="margin-top:16px"><button class="btn ghost sm" id="enableflags">🚩 Enable red-flag presets</button></div>`}
     <div class="row" style="margin-top:12px"><button class="btn ghost" id="addf">+ Add field</button><span class="sp"></span><button class="btn" id="donef">Done</button></div>`;
     m.querySelectorAll('[data-lab]').forEach(e => e.oninput = () => { r.fields[e.dataset.lab].label = e.value; save(); });
     m.querySelectorAll('[data-typ]').forEach(e => e.onchange = () => { r.fields[e.dataset.typ].type = e.value; save(); draw(m); });
     m.querySelectorAll('[data-opt]').forEach(e => e.oninput = () => { r.fields[e.dataset.opt].options = e.value.split(',').map(s => s.trim()).filter(Boolean); save(); });
     m.querySelectorAll('[data-rm]').forEach(e => e.onclick = () => { if (confirm('Remove this field?')) { r.fields.splice(e.dataset.rm, 1); save(); draw(m); } });
     m.querySelector('#addf').onclick = () => { r.fields.push(F('New field')); save(); draw(m); };
+    m.querySelectorAll('[data-flagp]').forEach(e => e.oninput = () => { const old = r.flagPresets[+e.dataset.flagp]; r.flagPresets[+e.dataset.flagp] = e.value; r.people.forEach(p => (p.flags || []).forEach(f => { if (f.label === old && f.source === 'Me') f.label = e.value; })); save(); });
+    m.querySelectorAll('[data-rmflagp]').forEach(e => e.onclick = () => { r.flagPresets.splice(+e.dataset.rmflagp, 1); save(); draw(m); });
+    const afp = m.querySelector('#addflagp'); afp && (afp.onclick = () => { const v = m.querySelector('#newflagp').value.trim(); if (v) { (r.flagPresets = r.flagPresets || []).push(v); save(); draw(m); } });
+    const ef = m.querySelector('#enableflags'); ef && (ef.onclick = () => { r.flagPresets = [...FLAG_PRESETS]; save(); draw(m); });
     m.querySelector('#donef').onclick = () => { m.remove(); route(); };
   };
   modal('', draw);
@@ -432,11 +459,12 @@ function shareModal(r, p) {
   const cats = r.type === 'dating' ? ['Good for me', 'Trustworthy', 'Kind', 'Fun', 'Long-term potential', 'Vibe'] : ['Good fit', 'Reliable', 'Trustworthy', 'Recommend'];
   modal(`<h3>Get feedback on ${esc(p.name)}</h3><p class="mut">Pick what your friend can see. Rankings and notes are hidden by default.</p>
   ${opts.map(o => `<label class="chk"><input type="checkbox" data-so="${o.id}" ${o.def && !/note/i.test(o.label) ? 'checked' : ''}> ${esc(o.label)}</label>`).join('')}
+  <label class="chk"><input type="checkbox" id="sflags" checked> Allow friends to add red flags</label>
   <label class="f"><span>Categories your friend votes on (comma separated)</span><input id="scats" value="${cats.join(', ')}"></label>
   <button class="btn" id="mk">Create share link</button><div id="sout"></div>`, m => {
     m.querySelector('#mk').onclick = async () => {
       const on = new Set([...m.querySelectorAll('[data-so]:checked')].map(e => e.dataset.so));
-      const card = { name: p.name, categories: m.querySelector('#scats').value.split(',').map(s => s.trim()).filter(Boolean),
+      const card = { name: p.name, allowFlags: m.querySelector('#sflags').checked, flagPresets: r.flagPresets || (r.type === 'dating' ? FLAG_PRESETS : []), categories: m.querySelector('#scats').value.split(',').map(s => s.trim()).filter(Boolean),
         photo: on.has('_photo') ? (p.photos?.[0] || null) : null, tags: on.has('_tags') ? (p.tags || []) : [],
         fields: [...(on.has('_rank') && p.rank ? [{ label: 'Ranking', value: '#' + p.rank }] : []), ...r.fields.filter(f => on.has(f.id)).map(f => ({ label: f.label, value: p.values[f.id] }))] };
       try {
@@ -533,6 +561,11 @@ function bindPerson(r, p) {
   document.querySelectorAll('[data-f]').forEach(e => { const ev = e.tagName === 'SELECT' || e.type === 'checkbox' || e.type === 'date' ? 'onchange' : 'oninput'; e[ev] = () => { p.values[e.dataset.f] = e.type === 'checkbox' ? e.checked : e.value; dirty(); }; });
   document.querySelectorAll('[data-rate]').forEach(s => s.querySelectorAll('button').forEach(b => b.onclick = () => { p.values[s.dataset.rate] = +b.dataset.v; dirty(); s.querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.v <= +b.dataset.v)); }));
   document.querySelectorAll('[data-pref]').forEach(b => b.onclick = () => cycleBtn(b, () => p.prefs[b.dataset.pref], v => { p.prefs[b.dataset.pref] = v; dirty(); }));
+  document.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { const l = b.dataset.preset, i = (p.flags || []).findIndex(f => f.label === l && f.source === 'Me' && f.status !== 'pending'); if (i >= 0) p.flags.splice(i, 1); else (p.flags = p.flags || []).push({ id: uid(), label: l, sev: 'red', note: '', at: Date.now(), source: 'Me', status: 'official' }); dirty(); route(); });
+  $('#addflag').onclick = () => { const l = $('#flagtext').value.trim(); if (!l) return toast('Type a flag first'); (p.flags = p.flags || []).push({ id: uid(), label: l, sev: document.querySelector('input[name=fsev]:checked')?.value || 'red', note: $('#flagnote').value.trim(), at: Date.now(), source: 'Me', status: 'official' }); dirty(); route(); toast('Flag added 🚩'); };
+  document.querySelectorAll('[data-rmflag]').forEach(b => b.onclick = () => { p.flags = p.flags.filter(f => String(f.id) !== b.dataset.rmflag); dirty(); route(); });
+  document.querySelectorAll('[data-accflag]').forEach(b => b.onclick = () => { const f = p.flags.find(x => String(x.id) === b.dataset.accflag); if (f) f.status = 'official'; dirty(); route(); toast('Flag accepted ✓'); });
+  document.querySelectorAll('[data-disflag]').forEach(b => b.onclick = () => { p.flags = p.flags.filter(f => String(f.id) !== b.dataset.disflag); dirty(); route(); });
   document.querySelectorAll('[data-rmtag]').forEach(b => b.onclick = () => { p.tags = p.tags.filter(t => t !== b.dataset.rmtag); dirty(); route(); });
   document.querySelectorAll('.sw input').forEach(i => i.addEventListener('change', () => i.parentNode.querySelector('b').textContent = i.checked ? 'Yes' : 'No'));
   $('#phup').onchange = async e => { for (const f of e.target.files) p.photos.push(await resize(f)); dirty(); route(); };
@@ -542,10 +575,12 @@ function bindPerson(r, p) {
   $('#refresh').onclick = async () => { await pullFeedback(); save(); route(); toast('Feedback refreshed'); };
 }
 function bindFriend(code) {
-  const votes = {};
+  const votes = {}; let fflag = '';
+  document.querySelectorAll('[data-fflag]').forEach(b => b.onclick = () => { fflag = fflag === b.dataset.fflag ? '' : b.dataset.fflag; document.querySelectorAll('[data-fflag]').forEach(x => x.classList.toggle('on', x.dataset.fflag === fflag)); });
   document.querySelectorAll('[data-fv]').forEach(b => b.onclick = () => cycleBtn(b, () => votes[b.dataset.fv], v => { if (v) votes[b.dataset.fv] = v; else delete votes[b.dataset.fv]; }));
   $('#fsend') && ($('#fsend').onclick = async () => {
-    try { await sendFeedback(code, { knows: $('#fknows').checked, votes, comment: $('#fcom').value, from: $('#ffrom').value, at: Date.now() });
+    const fl = ($('#fflagtext')?.value.trim() || fflag); const flag = fl ? { label: fl, sev: document.querySelector('input[name=ffsev]:checked')?.value || 'red' } : null;
+    try { await sendFeedback(code, { knows: $('#fknows').checked, votes, comment: $('#fcom').value, from: $('#ffrom').value, at: Date.now(), ...(flag ? { flag } : {}) });
       $('#app').querySelector('.wrap').innerHTML = '<div class="panel"><h2>Thanks! 💜</h2><p>Your feedback was sent privately to your friend.</p></div>'; } catch (e) { toast(e.message); }
   });
 }

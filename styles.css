@@ -228,3 +228,18 @@ select{min-height:44px}
   .swmenu{right:auto;width:420px}
   .trow{padding-left:24px;padding-right:24px}
 }
+/* ===== v6: red flags ===== */
+.flagline{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.flchip{font-size:11.5px;padding:3px 9px;border-radius:99px;background:rgba(190,60,80,.18);border:1px solid rgba(255,120,140,.4);color:#ffb3c0}
+.flchip.penb{background:rgba(255,180,80,.14);border-color:rgba(255,180,80,.45);color:#ffcf87}
+.flagchips .chip{white-space:normal;text-align:left}
+.flaglist{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.flagit{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:18px;border:1px solid var(--line);background:#140c17}
+.flagit .fic{font-size:20px}.flagit .fx{flex:1;min-width:0}.flagit .fx b{font-size:14.5px}
+.flagit.s-red{border-color:rgba(255,120,140,.45)}.flagit.s-yellow{border-color:rgba(255,180,80,.45)}.flagit.s-green{border-color:rgba(120,220,150,.4)}
+.qa-x{width:40px;height:40px;flex:0 0 40px;border-radius:50%;border:1px solid var(--line);background:#2a1c2d;color:var(--ink);font-size:18px}
+.pendbox{margin-top:16px;padding:14px;border-radius:20px;border:1px solid rgba(255,180,80,.4);background:rgba(255,170,60,.06)}
+.pendbox .flagit{margin-top:8px}
+.flagbar i{background:linear-gradient(90deg,#ff8a7a,#c2435e)!important}
+.flagbar{grid-template-columns:minmax(130px,1.3fr) 1fr 36px}.flagbar span{white-space:normal;line-height:1.25}
+.flagit{flex-wrap:wrap}.flagit .fx{flex:1 1 150px}
