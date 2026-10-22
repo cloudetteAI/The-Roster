@@ -5,6 +5,11 @@ let fb = null, user = null, data = { rosters: [] };
 const $ = s => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 10);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Only real inline images may become CSS background URLs. Anything else (e.g. `x)" onmouseover="…`) is dropped.
+const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const safeImg = u => (typeof u === 'string' && IMG_RE.test(u)) ? u : '';
+const bgImg = u => { const s = safeImg(u); return s ? `background-image:url('${esc(s)}')` : ''; };
+const sevOf = v => SEV[v] ? v : 'red';
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); };
 
 // ---------- Templates ----------
@@ -75,7 +80,7 @@ async function pullFeedback() {
     else { try { const q = await fb.getDocs(fb.collection(fb.db, 'shares', code, 'feedback')); list = q.docs.map(d => ({ ...d.data(), _id: d.id })); } catch (e) { } }
     p.feedback = p.feedback || [];
     for (const f of list) { const k = f._id || (f.at + f.from); if (!p.feedback.some(x => x.k === k)) p.feedback.push({ ...f, k });
-      if (f.flag?.label) { p.flags = p.flags || []; if (!p.flags.some(x => x.fbk === k)) p.flags.push({ id: k, label: f.flag.label, sev: SEV[f.flag.sev] ? f.flag.sev : 'red', note: f.comment || '', at: f.at || Date.now(), source: f.from || 'A friend', status: 'pending', fbk: k }); } }
+      if (typeof f.flag?.label === 'string' && f.flag.label) { p.flags = p.flags || []; if (!p.flags.some(x => x.fbk === k)) p.flags.push({ id: String(k), label: f.flag.label.slice(0, 200), sev: sevOf(f.flag.sev), note: String(f.comment || '').slice(0, 2000), at: +f.at || Date.now(), source: String(f.from || 'A friend').slice(0, 100), status: 'pending', fbk: k }); } }
   }
   migrate();
 }
@@ -175,22 +180,22 @@ function fieldInput(f, v) {
 function viewPerson(r, p) {
   const prefs = r.prefs || [];
   return `${header(r)}<div class="wrap"><div class="row"><a class="back" href="#r/${r.id}">← ${esc(r.name)}</a><span class="sp"></span><button class="btn sm" id="share">🔗 Get feedback</button><button class="btn danger sm" id="delp">Remove</button></div>
-  <div class="pgrid"><div class="pane"><div class="panel hero-p"><div class="avatar" style="${p.photos?.[0] ? `background-image:url(${p.photos[0]})` : ''}">${p.photos?.[0] ? '' : esc((p.name || '?')[0])}</div><label class="f"><span>Code name</span><input id="pname" value="${esc(p.name)}" placeholder="e.g. Mr. Tuesday, The Architect"></label><p class="hint">☾ Code names keep things private — skip real names.</p>
+  <div class="pgrid"><div class="pane"><div class="panel hero-p"><div class="avatar" style="${bgImg(p.photos?.[0])}">${safeImg(p.photos?.[0]) ? '' : esc((p.name || '?')[0])}</div><label class="f"><span>Code name</span><input id="pname" value="${esc(p.name)}" placeholder="e.g. Mr. Tuesday, The Architect"></label><p class="hint">☾ Code names keep things private — skip real names.</p>
   <label class="f"><span>Work / company</span><input id="pwork" value="${esc(p.work || '')}" placeholder="e.g. Architect at a design studio"></label><div class="stpill st-${stOf(p)}">${STATUSES[stOf(p)].ic} ${STATUSES[stOf(p)].l}${stOf(p) === 'active' ? (p.place ? ` · ${PLACES[p.place][0]} ${PLACES[p.place][1]}` : ` · In the pile (#${p.rank})`) : ''}</div>
   ${stOf(p) === 'active' ? `<label class="f"><span>Placement</span></label><div class="seg place-seg">${[1, 2, 3].map(k => `<label><input type="radio" name="pp" value="${k}" ${p.place === k ? 'checked' : ''}><span>${PLACES[k][0]} ${PLACES[k][1]}</span></label>`).join('')}<label><input type="radio" name="pp" value="" ${!p.place ? 'checked' : ''}><span>🗂️ In the pile</span></label></div>` : ''}
   <label class="f"><span>Tags / labels (comma separated — e.g. tall, funny, local)</span><input id="ptags" value="${esc((p.tags || []).join(', '))}"></label><div class="chips">${(p.tags || []).map(t => `<button class="tag chip" data-rmtag="${esc(t)}">#${esc(t)} <i>×</i></button>`).join('')}</div></div>
-  <div class="panel"><b>📸 Photos</b><div class="photos" style="margin:10px 0">${(p.photos || []).map((u, i) => `<div style="background-image:url(${u})"><button data-rmph="${i}">×</button></div>`).join('')}</div>
+  <div class="panel"><b>📸 Photos</b><div class="photos" style="margin:10px 0">${(p.photos || []).map((u, i) => `<div style="${bgImg(u)}"><button data-rmph="${i}">×</button></div>`).join('')}</div>
   <input type="file" accept="image/*" multiple id="phup"><p class="mut">${DEMO ? 'Demo mode: photos are resized and stored as data URLs in this browser.' : 'Photos are stored (resized) inside your private roster doc. Firebase Storage-ready: swap to Storage for full-size uploads.'}</p></div></div><div class="pane">
   <div class="panel"><b class="ph2">{ details }</b><div class="kv">${r.fields.map(f => `<label class="f bub ${f.type === 'notes' ? 'wide' : ''}"><span>${esc(f.label)}</span>${fieldInput(f, p.values?.[f.id])}</label>`).join('')}</div></div>
   ${prefs.length ? `<div class="panel"><b>Physical preferences</b><p class="mut">Tap to cycle 👍 yes → meh → 👎 no. Private to you.</p><div class="tcs">${prefs.map(k => tcBtn('data-pref', k, p.prefs?.[k])).join('')}</div></div>` : ''}
   <div class="panel"><b>🚩 Flags</b>
   ${(r.flagPresets?.length) ? `<p class="mut" style="margin:6px 0">Tap to toggle a preset:</p><div class="chips flagchips">${r.flagPresets.map(l => { const on = offFlags(p).some(f => f.label === l && f.source === 'Me'); return `<button type="button" class="tag chip ${on ? 'on' : ''}" data-preset="${esc(l)}">🚩 ${esc(l)}</button>`; }).join('')}</div>` : '<p class="mut" style="margin:6px 0">Add your own flags below. (Preset lists live in roster settings for Dating rosters.)</p>'}
-  <div class="flaglist">${offFlags(p).map(f => `<div class="flagit s-${f.sev}"><span class="fic">${SEV[f.sev]?.[0] || '🚩'}</span><div class="fx"><b>${esc(f.label)}</b><div class="mut">${SEV[f.sev]?.[1] || ''} · ${fmtD(f.at)} · from ${esc(f.source || 'Me')}${f.note ? ` · “${esc(f.note)}”` : ''}</div></div><button type="button" class="qa-x" data-rmflag="${f.id}" aria-label="Remove flag">×</button></div>`).join('') || '<p class="mut">No flags yet.</p>'}</div>
+  <div class="flaglist">${offFlags(p).map(f => `<div class="flagit s-${sevOf(f.sev)}"><span class="fic">${SEV[f.sev]?.[0] || '🚩'}</span><div class="fx"><b>${esc(f.label)}</b><div class="mut">${SEV[f.sev]?.[1] || ''} · ${fmtD(f.at)} · from ${esc(f.source || 'Me')}${f.note ? ` · “${esc(f.note)}”` : ''}</div></div><button type="button" class="qa-x" data-rmflag="${esc(f.id)}" aria-label="Remove flag">×</button></div>`).join('') || '<p class="mut">No flags yet.</p>'}</div>
   <div class="kv" style="margin-top:12px"><label class="f bub"><span>Custom flag</span><input id="flagtext" placeholder="e.g. Kept checking phone"></label>
   <label class="f bub"><span>Note (optional)</span><input id="flagnote" placeholder="What happened?"></label></div>
   <div class="seg" style="margin:10px 0">${Object.entries(SEV).map(([k, v]) => `<label><input type="radio" name="fsev" value="${k}" ${k === 'red' ? 'checked' : ''}><span>${v[0]} ${v[1]}</span></label>`).join('')}</div>
   <button class="btn sm" id="addflag" type="button">+ Add flag</button>
-  ${penFlags(p).length ? `<div class="pendbox"><b>⏳ From friends — pending (${penFlags(p).length})</b>${penFlags(p).map(f => `<div class="flagit s-${f.sev}"><span class="fic">${SEV[f.sev]?.[0] || '🚩'}</span><div class="fx"><b>${esc(f.label)}</b><div class="mut">${SEV[f.sev]?.[1] || ''} · ${fmtD(f.at)} · from ${esc(f.source || 'A friend')}${f.note ? ` · “${esc(f.note)}”` : ''}</div></div><span class="row" style="gap:4px"><button type="button" class="btn sm" data-accflag="${f.id}">Accept</button><button type="button" class="btn ghost sm" data-disflag="${f.id}">Dismiss</button></span></div>`).join('')}</div>` : '<p class="mut" style="margin-top:12px">No pending friend flags.</p>'}
+  ${penFlags(p).length ? `<div class="pendbox"><b>⏳ From friends — pending (${penFlags(p).length})</b>${penFlags(p).map(f => `<div class="flagit s-${sevOf(f.sev)}"><span class="fic">${SEV[f.sev]?.[0] || '🚩'}</span><div class="fx"><b>${esc(f.label)}</b><div class="mut">${SEV[f.sev]?.[1] || ''} · ${fmtD(f.at)} · from ${esc(f.source || 'A friend')}${f.note ? ` · “${esc(f.note)}”` : ''}</div></div><span class="row" style="gap:4px"><button type="button" class="btn sm" data-accflag="${esc(f.id)}">Accept</button><button type="button" class="btn ghost sm" data-disflag="${esc(f.id)}">Dismiss</button></span></div>`).join('')}</div>` : '<p class="mut" style="margin-top:12px">No pending friend flags.</p>'}
   </div>
   <div class="panel"><b>Status</b><div class="seg" style="margin:10px 0">${Object.entries(STATUSES).map(([k, v]) => `<label><input type="radio" name="pst" data-st="${k}" ${stOf(p) === k ? 'checked' : ''}><span>${v.ic} ${v.l}</span></label>`).join('')}</div>
   ${p.penalty ? `<p class="hint">⏸ ${esc(p.penalty.reason || 'No reason')}${p.penalty.returnBy ? ' · back by ' + fmtD(p.penalty.returnBy + 'T12:00') : ''}</p>` : ''}
@@ -202,7 +207,7 @@ function viewFriend(code, s) {
   if (!s) return `${header()}<div class="wrap"><div class="panel">This share link isn't valid (or, in demo mode, was created in another browser).</div></div>`;
   const c = s.card;
   return `${header()}<div class="wrap" style="max-width:560px"><h2>Your friend wants your take 👀</h2>
-  <div class="pcard" style="cursor:default">${c.photo ? `<div class="ph" style="background-image:url(${c.photo})"></div>` : ''}<div class="b"><div class="cn">Code name</div><h3>${esc(c.name)}</h3>${(c.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
+  <div class="pcard" style="cursor:default">${safeImg(c.photo) ? `<div class="ph" style="${bgImg(c.photo)}"></div>` : ''}<div class="b"><div class="cn">Code name</div><h3>${esc(c.name)}</h3>${(c.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}
   ${(c.fields || []).map(f => `<div><span class="mut">${esc(f.label)}:</span> ${esc(f.value === true ? 'Yes' : f.value)}</div>`).join('')}</div></div>
   <div class="panel"><label class="f"><span>Your name (optional)</span><input id="ffrom"></label><label class="chk"><input type="checkbox" id="fknows"> I know this person personally</label>
   <p class="mut">Based on what you know, are they good for your friend?</p><p class="hint">Tap to cycle 👍 yes → meh → 👎 no.</p><div class="tcs">${(c.categories || []).map(k => RENAME[k] || k).map(k => tcBtn('data-fv', k, null)).join('')}</div>
@@ -222,7 +227,7 @@ const penFlags = p => (p.flags || []).filter(f => f.status === 'pending');
 const CYCLE = [null, 'up', 'meh', 'down'], nextV = v => CYCLE[(CYCLE.indexOf(v ?? null) + 1) % 4];
 const TLBL = { up: 'Yes', meh: 'Meh', down: 'No' };
 const tcBtn = (attr, k, v) => `<button type="button" class="tc s-${v || 'none'}" ${attr}="${esc(k)}" aria-label="${esc(k)}: ${TLBL[v] || 'not rated'}"><span class="tl">${esc(k)}</span><span class="ti">👍</span><em>${TLBL[v] || 'Tap'}</em></button>`;
-const tIcon = v => `<span class="tmini s-${v}">👍</span>`;
+const tIcon = v => `<span class="tmini s-${TLBL[v] ? v : 'none'}">👍</span>`;
 function cycleBtn(b, get, set) { const v = nextV(get()); set(v); b.className = 'tc pop s-' + (v || 'none'); b.querySelector('em').textContent = TLBL[v] || 'Tap'; b.setAttribute('aria-label', b.querySelector('.tl').textContent + ': ' + (TLBL[v] || 'not rated')); }
 // ---------- Placement (1st/2nd/3rd/pile) ----------
 const PLACES = { 1: ['🥇', '1st'], 2: ['🥈', '2nd'], 3: ['🥉', '3rd'] };
@@ -292,7 +297,7 @@ function bizCard(r, p, manual) {
   const pl = st === 'active' && p.place;
   return `<div class="biz st-${st} ${pl ? 'place-' + pl : ''}" data-pid="${p.id}">${pl === 1 ? '<div class="crown">♛</div>' : ''}
     ${st === 'active' && manual && !pl ? '<div class="handle" aria-label="Drag to reorder">⋮⋮</div>' : ''}
-    <div class="bph" style="${ph ? `background-image:url(${ph})` : ''}">${ph ? '' : esc((p.name || '?')[0])}</div>
+    <div class="bph" style="${bgImg(ph)}">${safeImg(ph) ? '' : esc((p.name || '?')[0])}</div>
     <div class="bi"><div class="bn">${esc(p.name)}</div><div class="bw">${esc(p.work || 'Work / company not set')}</div>
     <div class="bc">${cardChips(r, p).map(c => `<span>${esc(c)}</span>`).join('')}</div>
     ${(() => { const o = offFlags(p), pn = penFlags(p); if (!o.length && !pn.length) return ''; const top = o.find(f => f.sev === 'red') || o[0]; return `<div class="flagline">${o.length ? `<span class="flchip">${SEV[top.sev]?.[0] || '🚩'} ${o.length} · ${esc(top.label)}</span>` : ''}${pn.length ? `<span class="flchip penb">⏳ ${pn.length} pending</span>` : ''}</div>`; })()}
@@ -465,7 +470,7 @@ function shareModal(r, p) {
     m.querySelector('#mk').onclick = async () => {
       const on = new Set([...m.querySelectorAll('[data-so]:checked')].map(e => e.dataset.so));
       const card = { name: p.name, allowFlags: m.querySelector('#sflags').checked, flagPresets: r.flagPresets || (r.type === 'dating' ? FLAG_PRESETS : []), categories: m.querySelector('#scats').value.split(',').map(s => s.trim()).filter(Boolean),
-        photo: on.has('_photo') ? (p.photos?.[0] || null) : null, tags: on.has('_tags') ? (p.tags || []) : [],
+        photo: on.has('_photo') ? (safeImg(p.photos?.[0]) || null) : null, tags: on.has('_tags') ? (p.tags || []) : [],
         fields: [...(on.has('_rank') && p.rank ? [{ label: 'Ranking', value: '#' + p.rank }] : []), ...r.fields.filter(f => on.has(f.id)).map(f => ({ label: f.label, value: p.values[f.id] }))] };
       try {
         const code = await createShare(r.id, p.id, card); p.shares = [...(p.shares || []), code]; save();

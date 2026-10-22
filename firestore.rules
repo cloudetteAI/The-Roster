@@ -5,14 +5,50 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // ---- Validation helpers (never trust the client: anyone can write to
+    // Firestore directly, skipping the app's own checks) ----
+
+    // Photo must be a real inline image (jpeg/png/webp, base64 only) and
+    // under ~700 KB. This blocks strings like  x)" onmouseover="steal()
+    function isSafePhoto(p) {
+      return p == null
+        || (p is string && p.size() < 700000
+            && p.matches('data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+'));
+    }
+    function isShortString(v, max) { return v is string && v.size() <= max; }
+
+    // The limited card a friend sees. Allowed keys only, with types + caps.
+    function isValidCard(c) {
+      return c is map
+        && c.keys().hasOnly(['name','allowFlags','flagPresets','categories','photo','tags','fields'])
+        && isShortString(c.get('name', ''), 200)
+        && c.get('allowFlags', true) is bool
+        && c.get('flagPresets', []) is list && c.get('flagPresets', []).size() <= 60
+        && c.get('categories', []) is list && c.get('categories', []).size() <= 30
+        && c.get('tags', []) is list && c.get('tags', []).size() <= 60
+        && c.get('fields', []) is list && c.get('fields', []).size() <= 60
+        && isSafePhoto(c.get('photo', null));
+    }
+    function isValidShare(d) {
+      return d.keys().hasOnly(['ownerUid','personId','rosterId','card','createdAt'])
+        && d.keys().hasAll(['ownerUid','card'])
+        && d.ownerUid == request.auth.uid
+        && isShortString(d.get('personId', ''), 64)
+        && isShortString(d.get('rosterId', ''), 64)
+        && d.get('createdAt', 0) is int
+        && isValidCard(d.card);
+    }
+
     // Share cards: a limited, owner-chosen subset of one person's card.
     // Readable only by exact code (no listing). Only owner can create/update/delete.
     match /shares/{code} {
       allow get: if true;
       allow list: if false;
-      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid
-                    && request.resource.data.keys().hasOnly(['ownerUid','personId','rosterId','card','createdAt']);
-      allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow create: if request.auth != null && isValidShare(request.resource.data);
+      allow update: if request.auth != null && resource.data.ownerUid == request.auth.uid
+                    && isValidShare(request.resource.data);
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
 
       // Friends leave feedback; only the owner can read it back.
       match /feedback/{fid} {
@@ -24,5 +60,6 @@ service cloud.firestore {
         allow update: if false;
       }
     }
+
   }
 }
