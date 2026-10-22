@@ -51,15 +51,28 @@ service cloud.firestore {
       allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
 
       // Friends leave feedback; only the owner can read it back.
+      // 'flag' is an optional friend red/yellow/green flag: { label, sev }.
       match /feedback/{fid} {
-        allow create: if request.resource.data.keys().hasOnly(['knows','votes','comment','from','at'])
+        allow create: if request.resource.data.keys().hasOnly(['knows','votes','comment','from','at','flag'])
                       && request.resource.data.comment is string
-                      && request.resource.data.comment.size() < 2000;
+                      && request.resource.data.comment.size() < 2000
+                      && request.resource.data.get('knows', false) is bool
+                      && request.resource.data.get('votes', {}) is map
+                      && request.resource.data.get('votes', {}).size() <= 30
+                      && isShortString(request.resource.data.get('from', ''), 100)
+                      && request.resource.data.get('at', 0) is int
+                      && (!('flag' in request.resource.data) || isValidFlag(request.resource.data.flag));
         allow read, delete: if request.auth != null
                       && get(/databases/$(database)/documents/shares/$(code)).data.ownerUid == request.auth.uid;
         allow update: if false;
       }
     }
 
+    function isValidFlag(f) {
+      return f is map
+        && f.keys().hasOnly(['label','sev']) && f.keys().hasAll(['label'])
+        && f.label is string && f.label.size() > 0 && f.label.size() <= 200
+        && f.get('sev', 'red') in ['red','yellow','green'];
+    }
   }
 }
